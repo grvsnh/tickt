@@ -23,6 +23,3 @@ sound = false
 [recovery]
 # ask, resume (only when the saved timer has not expired), or discard
 on_startup = "ask"
-
-[logging]
-level = "warn"

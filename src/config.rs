@@ -68,7 +68,6 @@ pub struct AppConfig {
     pub ui: UiConfig,
     pub notifications: NotificationConfig,
     pub recovery: RecoveryConfig,
-    pub logging: LoggingConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -106,12 +105,6 @@ pub struct RecoveryConfig {
     pub on_startup: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct LoggingConfig {
-    pub level: String,
-}
-
 impl Default for TimerConfig {
     fn default() -> Self {
         Self {
@@ -144,12 +137,6 @@ impl Default for NotificationConfig {
 impl Default for RecoveryConfig {
     fn default() -> Self {
         Self { on_startup: "ask".to_owned() }
-    }
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self { level: "warn".to_owned() }
     }
 }
 
