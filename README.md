@@ -53,7 +53,7 @@ cargo build --release --locked
 The `rust-toolchain.toml` file pins the compiler used by Cargo. If you already have a checkout,
 run the build commands from its root.
 
-The source build needs a stable Rust toolchain (Rust 1.88.0), a C compiler, and `pkg-config`.
+The source build needs a stable Rust toolchain (Rust 1.88.0) and a C compiler.
 SQLite is compiled through `rusqlite`'s bundled feature, so a system SQLite development package
 is not required. The included `Dockerfile` installs the build prerequisites and produces the
 release binary in a Linux container.
@@ -78,23 +78,19 @@ For a local checkout, `cargo run --locked` launches Tickt immediately with defau
 
 ### Release binaries
 
-Tagged GitHub releases provide archives for Linux x86_64, macOS Intel, macOS Apple Silicon, and
-Windows x86_64. The Linux binary is a glibc Linux executable, not an Ubuntu-only package: it is
-intended to run on Ubuntu, Debian, Arch Linux, Fedora, and other current x86_64 glibc
-distributions. Download the archive for your platform from
+Tagged GitHub releases provide a Linux x86_64 archive. The binary is a glibc Linux executable,
+not an Ubuntu-only package: it is intended to run on Ubuntu, Debian, Arch Linux, Fedora, and
+other current x86_64 glibc distributions. Download the archive from
 <https://github.com/grvsnh/tickt/releases>, extract it, and run `tickt --help`.
 
-On Linux or macOS, you can put the binary on your PATH:
+On Linux, put the binary on your PATH:
 
 ```sh
-tar -xzf tickt-linux-x86_64.tar.gz # use the matching macOS archive on macOS
+tar -xzf tickt-linux-x86_64.tar.gz
 mkdir -p "$HOME/.local/bin"
 install -m 0755 tickt "$HOME/.local/bin/tickt"
 tickt --version
 ```
-
-On Windows, extract `tickt-windows-x86_64.zip`, then add the extracted directory to your user
-`PATH`. The release page includes a SHA-256 file for every archive.
 
 Arch Linux and Fedora users do not need an AUR package, COPR repository, or npm. The release
 archive is the installation format:
@@ -108,8 +104,34 @@ tickt --version
 ```
 
 For source builds, Arch needs `base-devel` and the pinned Rust toolchain; Fedora needs a C/C++
-toolchain, `make`, `pkg-config`, and the pinned Rust toolchain. The bundled SQLite build means a
-system SQLite development package is not required.
+toolchain, `make`, and the pinned Rust toolchain. The bundled SQLite build means a system SQLite
+development package and `pkg-config` are not required.
+
+### Windows through WSL2
+
+There is no native Windows `.exe` release yet. Windows users can run the Linux release through
+WSL2 and Windows Terminal:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Restart Windows if prompted, open the Ubuntu app or Windows Terminal with an Ubuntu profile, then
+run the Linux installation commands from inside WSL. For example:
+
+```sh
+sudo apt update
+sudo apt install -y ca-certificates curl tar
+mkdir -p "$HOME/.local/bin"
+curl -fL -o /tmp/tickt.tar.gz \
+  https://github.com/grvsnh/tickt/releases/download/v1.0.0/tickt-linux-x86_64.tar.gz
+tar -xzf /tmp/tickt.tar.gz -C "$HOME/.local/bin"
+tickt --version
+```
+
+WSL is treated as Linux: configuration and history stay inside the WSL home directory under the
+XDG paths. Desktop notifications are optional and depend on the WSL environment. A native
+Windows build can be added later without changing the timer or storage model.
 
 ## CLI
 
@@ -222,7 +244,7 @@ dependencies have been fetched once:
 cargo fmt --all -- --check
 cargo check --locked
 cargo test --locked --offline
-cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo clippy --locked --all-targets -- -D warnings
 ```
 
 Equivalent shortcuts are available as `make fmt`, `make check`, `make test`, and `make lint`.
@@ -239,18 +261,18 @@ never inserts fake completions or sample history.
 ## Release process
 
 Releases can be created automatically from the GitHub Actions UI by running the `Release`
-workflow and entering the next semantic version, currently `0.1.1`. The workflow creates and
-pushes the `v0.1.1` tag itself. The traditional command-line path also works:
+workflow and entering `1.0.0`. The workflow creates and pushes the `v1.0.0` tag itself. The
+traditional command-line path also works:
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 The workflow in `.github/workflows/release.yml` verifies the version against `Cargo.toml`, builds
-native release binaries on Linux, macOS Intel, macOS Apple Silicon, and Windows x86_64, creates
-archives and SHA-256 files, and publishes them to the GitHub release. No npm account or token is
-required. The first release has not been published from this checkout yet.
+one optimized Linux x86_64 archive, checks the extracted binary in Arch Linux and Fedora
+containers, generates a SHA-256 file, and publishes it to the GitHub release. No npm account or
+token is required. The first v1.0 release has not been published from this checkout yet.
 
 ## OmniRush integration idea
 
@@ -292,11 +314,12 @@ the manual terminal checklist.
 
 ## Current limitations
 
-- Release artifacts target Linux x86_64, macOS Intel, macOS Apple Silicon, and Windows x86_64.
-- There is no published release artifact from this checkout yet, and no package-manager formula,
-  sync service, or remote API.
-- Interactive behavior is implemented with Crossterm, but automated CI smoke-tests the
-  noninteractive CLI on each release platform rather than requiring a real terminal session.
+- Release artifacts target Linux x86_64 glibc distributions. Windows users should use WSL2 until
+  a native Windows build is added.
+- There is no published v1.0 release artifact from this checkout yet, and no package-manager
+  formula, sync service, or remote API.
+- Interactive behavior is implemented with Crossterm, while CI smoke-tests the noninteractive
+  CLI on the Linux release binary in Arch Linux and Fedora containers.
 - Perfect monotonic continuity is impossible across a process restart; recovery uses wall-clock
   timestamps and intentionally avoids fabricating completed work.
 - Visual verification requires a real terminal. Automated tests cover the domain and persistence

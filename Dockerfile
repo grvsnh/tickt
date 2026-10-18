@@ -1,7 +1,7 @@
 FROM rust:1.88-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y build-essential pkg-config ca-certificates \
+    && apt-get install --no-install-recommends -y build-essential ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

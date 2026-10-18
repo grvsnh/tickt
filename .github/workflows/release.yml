@@ -17,7 +17,8 @@ permissions:
 jobs:
   prepare:
     name: Prepare release tag
-    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -27,153 +28,115 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create or validate release tag
+      - name: Validate version and create tag
         id: release
         env:
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            version="$INPUT_VERSION"
-            tag="v$version"
-            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-              echo "version must be a semantic version such as 0.1.0" >&2
-              exit 1
-            fi
-          else
-            tag="$REF_NAME"
-            version="${tag#v}"
+          version="$INPUT_VERSION"
+          tag="v$version"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "version must be a semantic version such as 1.0.0" >&2
+            exit 1
           fi
-
           cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$version" = "$cargo_version"
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            if git rev-parse --verify --quiet "refs/tags/$tag"; then
-              echo "tag $tag already exists" >&2
-              exit 1
-            fi
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$tag" -m "Release $tag"
-            git push origin "$tag"
+          if git rev-parse --verify --quiet "refs/tags/$tag"; then
+            echo "tag $tag already exists" >&2
+            exit 1
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build ${{ matrix.label }}
+    name: Build Linux x86_64 release
+    if: always() && (github.event_name == 'push' || needs.prepare.result == 'success')
     needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            label: Linux x86_64
-            binary: tickt
-            archive: tickt-linux-x86_64.tar.gz
-            format: tar
-          - os: macos-13
-            target: x86_64-apple-darwin
-            label: macOS Intel
-            binary: tickt
-            archive: tickt-macos-x86_64.tar.gz
-            format: tar
-          - os: macos-14
-            target: aarch64-apple-darwin
-            label: macOS Apple Silicon
-            binary: tickt
-            archive: tickt-macos-aarch64.tar.gz
-            format: tar
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            label: Windows x86_64
-            binary: tickt.exe
-            archive: tickt-windows-x86_64.zip
-            format: zip
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
     steps:
-      - name: Check out release tag
+      - name: Check out release source
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@1.88.0
-        with:
-          targets: ${{ matrix.target }}
+
+      - name: Confirm Cargo version matches tag
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          test "$version" = "$cargo_version"
 
       - name: Build release binary
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --locked
 
-      - name: Package release asset
-        shell: bash
-        env:
-          TARGET: ${{ matrix.target }}
-          BINARY: ${{ matrix.binary }}
-          ARCHIVE: ${{ matrix.archive }}
-          FORMAT: ${{ matrix.format }}
+      - name: Package archive and checksum
         run: |
-          mkdir -p dist
-          cp "target/$TARGET/release/$BINARY" "dist/$BINARY"
-          chmod +x "dist/$BINARY"
-          if [[ "$FORMAT" == "zip" ]]; then
-            (cd dist && 7z a "$ARCHIVE" "$BINARY")
-          else
-            tar -C dist -czf "dist/$ARCHIVE" "$BINARY"
-          fi
-          sha256sum "dist/$ARCHIVE" | tee "dist/$ARCHIVE.sha256"
+          mkdir -p dist/package
+          cp target/release/tickt dist/package/tickt
+          chmod 0755 dist/package/tickt
+          tar -C dist/package -czf dist/tickt-linux-x86_64.tar.gz tickt
+          (cd dist && sha256sum tickt-linux-x86_64.tar.gz > tickt-linux-x86_64.tar.gz.sha256)
 
-      - name: Upload packaged asset
+      - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}
-          path: dist/*
+          name: tickt-linux-x86_64
+          path: |
+            dist/tickt-linux-x86_64.tar.gz
+            dist/tickt-linux-x86_64.tar.gz.sha256
           if-no-files-found: error
+
+  linux-distro-smoke:
+    name: Verify release on Arch and Fedora
+    if: always() && (github.event_name == 'push' || needs.prepare.result == 'success')
+    needs: [prepare, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tickt-linux-x86_64
+          path: dist
+
+      - name: Verify checksum and extract archive
+        run: |
+          (cd dist && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
+          mkdir extracted
+          tar -xzf dist/tickt-linux-x86_64.tar.gz -C extracted
+
+      - name: Run extracted binary in Arch and Fedora
+        run: |
+          for image in archlinux:latest fedora:latest; do
+            docker run --rm \
+              --volume "$GITHUB_WORKSPACE/extracted:/release:ro" \
+              "$image" \
+              /release/tickt --version
+          done
 
   publish:
     name: Publish GitHub release
+    if: always() && (github.event_name == 'push' || needs.prepare.result == 'success')
     needs: [prepare, build, linux-distro-smoke]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - name: Download packaged assets
+      - name: Download release artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: release-*
+          name: tickt-linux-x86_64
           path: dist
-          merge-multiple: true
 
-      - name: Create GitHub release
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: Tickt ${{ needs.prepare.outputs.tag }}
+          tag_name: ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
+          name: Tickt ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
           generate_release_notes: true
           files: dist/*
-
-  linux-distro-smoke:
-    name: Verify Linux release on ${{ matrix.distribution }}
-    needs: [prepare, build]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - distribution: Arch Linux
-            image: archlinux:latest
-          - distribution: Fedora
-            image: fedora:latest
-    steps:
-      - name: Download Linux release artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: release-x86_64-unknown-linux-gnu
-          path: dist
-
-      - name: Run release binary in ${{ matrix.distribution }}
-        run: |
-          docker run --rm \
-            --volume "$GITHUB_WORKSPACE/dist:/dist:ro" \
-            "${{ matrix.image }}" \
-            /dist/tickt --version

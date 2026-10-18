@@ -1,20 +1,17 @@
 # Release platform testing
 
-The release workflow builds and runs the noninteractive `--version` smoke command on every
-release target:
+Tickt v1.0 is a Linux-first release. The release workflow builds one optimized
+`x86_64-unknown-linux-gnu` binary and checks the extracted archive in current Arch Linux and
+Fedora containers. This keeps release time short while covering the main Linux distribution
+families without compiling the same Rust application repeatedly.
 
-- Linux x86_64 (`x86_64-unknown-linux-gnu`)
-- macOS Intel (`x86_64-apple-darwin`)
-- macOS Apple Silicon (`aarch64-apple-darwin`)
-- Windows x86_64 (`x86_64-pc-windows-msvc`)
+The release artifact is intended for current x86_64 glibc distributions, including Ubuntu,
+Debian, Arch Linux, Fedora, and similar systems. It is not an Alpine/musl artifact and does not
+provide a native Windows `.exe`.
 
-The smoke command verifies that the binary starts on the target OS without requiring a real TTY.
-Before calling an artifact production-ready, perform the interactive checklist below on at least
-one terminal for each platform.
+## Linux terminals
 
-## Linux
-
-Test in GNOME Terminal, Konsole, or another xterm-compatible terminal:
+Test in GNOME Terminal, Konsole, Alacritty, Foot, or another xterm-compatible terminal:
 
 ```sh
 ./tickt --version
@@ -25,9 +22,13 @@ Test in GNOME Terminal, Konsole, or another xterm-compatible terminal:
 Start, pause, resume, skip, reset, resize the window, open history/statistics/help, quit, and
 relaunch. Confirm that the shell is not left in raw mode.
 
-The release workflow also runs the Linux binary in current Arch Linux and Fedora containers. This
-checks that the Ubuntu-runner-built glibc binary is not tied to Ubuntu-specific runtime files. If
-Docker is available locally, run the same smoke test with:
+## Arch Linux and Fedora compatibility
+
+CI builds the release binary once on Ubuntu 22.04, extracts the archive, then runs that same
+binary in both Arch Linux and Fedora containers. This verifies that the release is not dependent
+on Ubuntu-only runtime files.
+
+When Docker is available locally:
 
 ```sh
 cargo build --release --locked
@@ -35,29 +36,19 @@ docker run --rm -v "$PWD:/work:ro" -w /work archlinux:latest /work/target/releas
 docker run --rm -v "$PWD:/work:ro" -w /work fedora:latest /work/target/release/tickt --version
 ```
 
-## macOS
+## Windows via WSL2
 
-Test in macOS Terminal and iTerm2:
-
-```sh
-./tickt --version
-./tickt
-```
-
-Use the same timer, resize, restart, and cleanup checks. Confirm that configuration and data are
-created under the platform-native application support directory.
-
-## Windows
-
-Test in Windows Terminal and PowerShell:
+Native Windows builds are not part of v1.0. Test the Linux artifact inside WSL2 using Windows
+Terminal:
 
 ```powershell
-.\tickt.exe --version
-.\tickt.exe
+wsl --install -d Ubuntu
 ```
 
-Use the same keyboard and resize checks. Confirm that the application exits cleanly and that
-history persists between launches.
+Inside WSL, extract `tickt-linux-x86_64.tar.gz`, run `tickt --version`, and perform the same
+timer, resize, restart, and terminal-cleanup checks. WSL uses Linux/XDG paths and may not provide
+desktop notifications; those integrations are optional.
 
-The current development environment verified the Linux binary and a pseudo-terminal launch;
-macOS and Windows interactive behavior remains a release-runner/manual verification item.
+The current development environment verified the Linux binary and a pseudo-terminal launch.
+Arch/Fedora container checks and WSL checks are configured for CI/manual execution, but were not
+run locally because Docker and WSL are unavailable in the current environment.

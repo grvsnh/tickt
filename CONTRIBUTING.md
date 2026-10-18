@@ -22,7 +22,7 @@ Before opening a pull request, run:
 cargo fmt --all -- --check
 cargo check --locked
 cargo test --locked --offline
-cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo clippy --locked --all-targets -- -D warnings
 ```
 
 ## Architecture boundaries

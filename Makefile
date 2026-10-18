@@ -1,4 +1,4 @@
-.PHONY: build check test fmt lint run
+.PHONY: build check test fmt lint run release
 
 build:
 	cargo build --locked
@@ -13,7 +13,10 @@ fmt:
 	cargo fmt --all -- --check
 
 lint:
-	cargo clippy --locked --all-targets --all-features -- -D warnings
+	cargo clippy --locked --all-targets -- -D warnings
 
 run:
 	cargo run --locked
+
+release:
+	cargo build --release --locked
