@@ -41,8 +41,7 @@ This is a representative layout, not a screenshot and not seeded application dat
 
 ## Installation
 
-There is no published release binary or package repository yet. Build from source with the
-pinned Rust toolchain:
+Build from source with the pinned Rust toolchain:
 
 ```sh
 git clone https://github.com/grvsnh/tickt.git
@@ -53,28 +52,6 @@ cargo build --release --locked
 
 The `rust-toolchain.toml` file pins the compiler used by Cargo. If you already have a checkout,
 run the build commands from its root.
-
-### Linux installation through npm
-
-The tagged release workflow publishes a small npm distribution wrapper named `tickt`. After the
-first release is published, Linux x86_64 users can install the prebuilt application with:
-
-```sh
-npm install --global tickt
-tickt
-```
-
-The npm package is not a JavaScript rewrite. Its postinstall step downloads the matching GitHub
-release binary, verifies its SHA-256 checksum, and installs it behind the `tickt` command. After
-installation, Tickt itself does not require Node.js or network access. Source builds remain the
-fallback for other platforms and architectures.
-
-To test the npm wrapper locally against the release binary built from this checkout:
-
-```sh
-cargo build --release --locked
-TICKT_BINARY_PATH="$PWD/target/release/tickt" npm install --global ./npm/tickt
-```
 
 The source build needs a stable Rust toolchain (Rust 1.88.0), a C compiler, and `pkg-config`.
 SQLite is compiled through `rusqlite`'s bundled feature, so a system SQLite development package
@@ -98,6 +75,24 @@ the terminal timer and SQLite history still work. Docker is an optional reproduc
 not a required runtime dependency.
 
 For a local checkout, `cargo run --locked` launches Tickt immediately with default settings.
+
+### Release binaries
+
+Tagged GitHub releases provide archives for Linux x86_64, macOS Intel, macOS Apple Silicon, and
+Windows x86_64. Download the archive for your platform from
+<https://github.com/grvsnh/tickt/releases>, extract it, and run `tickt --help`.
+
+On Linux or macOS, you can put the binary on your PATH:
+
+```sh
+tar -xzf tickt-linux-x86_64.tar.gz # use the matching macOS archive on macOS
+mkdir -p "$HOME/.local/bin"
+install -m 0755 tickt "$HOME/.local/bin/tickt"
+tickt --version
+```
+
+On Windows, extract `tickt-windows-x86_64.zip`, then add the extracted directory to your user
+`PATH`. The release page includes a SHA-256 file for every archive.
 
 ## CLI
 
@@ -132,7 +127,7 @@ See [docs/keybindings.md](docs/keybindings.md) for modal and recovery behavior.
 
 ## Configuration and data
 
-Tickt follows the XDG Base Directory Specification on Linux:
+On Linux, Tickt follows the XDG Base Directory Specification:
 
 | Purpose | Default path |
 | --- | --- |
@@ -141,7 +136,8 @@ Tickt follows the XDG Base Directory Specification on Linux:
 | Reserved log state path | `~/.local/state/tickt/tickt.log` |
 
 `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME` override these roots when they are
-absolute paths. Print the active configuration path with:
+absolute paths. On macOS and Windows, Tickt uses the platform-native application data directory
+provided by the `directories` crate. Print the active configuration path with:
 
 ```sh
 tickt config path
@@ -225,18 +221,19 @@ never inserts fake completions or sample history.
 
 ## Release process
 
-Releases are made by pushing a semantic-version tag such as `v0.1.0`:
+Releases can be created automatically from the GitHub Actions UI by running the `Release`
+workflow and entering a semantic version such as `0.1.0`. The workflow creates and pushes the
+`v0.1.0` tag itself. The traditional command-line path also works:
 
 ```sh
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The workflow in `.github/workflows/release.yml` verifies the tag against `Cargo.toml`, builds
-the Linux x86_64 binary, creates checksum-verified GitHub release assets, and publishes the npm
-wrapper. Repository maintainers must configure an `NPM_TOKEN` GitHub Actions secret with publish
-permission before pushing a release tag. The first release has not been published from this
-checkout yet.
+The workflow in `.github/workflows/release.yml` verifies the version against `Cargo.toml`, builds
+native release binaries on Linux, macOS Intel, macOS Apple Silicon, and Windows x86_64, creates
+archives and SHA-256 files, and publishes them to the GitHub release. No npm account or token is
+required. The first release has not been published from this checkout yet.
 
 ## OmniRush integration idea
 
@@ -260,6 +257,8 @@ The domain is intentionally small and synchronous:
 - `src/terminal.rs` — raw mode, alternate screen, cursor cleanup, and error-safe lifecycle.
 
 See [docs/architecture.md](docs/architecture.md) for the state and persistence boundaries.
+See [docs/platform-testing.md](docs/platform-testing.md) for release-platform smoke tests and
+the manual terminal checklist.
 
 ## Troubleshooting
 
@@ -276,8 +275,11 @@ See [docs/architecture.md](docs/architecture.md) for the state and persistence b
 
 ## Current limitations
 
-- Linux is the supported target. The XDG path behavior is intentionally Linux-first.
-- There is no published binary, package manager formula, sync service, or remote API yet.
+- Release artifacts target Linux x86_64, macOS Intel, macOS Apple Silicon, and Windows x86_64.
+- There is no published release artifact from this checkout yet, and no package-manager formula,
+  sync service, or remote API.
+- Interactive behavior is implemented with Crossterm, but automated CI smoke-tests the
+  noninteractive CLI on each release platform rather than requiring a real terminal session.
 - Perfect monotonic continuity is impossible across a process restart; recovery uses wall-clock
   timestamps and intentionally avoids fabricating completed work.
 - Visual verification requires a real terminal. Automated tests cover the domain and persistence

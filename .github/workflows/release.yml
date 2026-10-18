@@ -4,60 +4,150 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version to release, without the v prefix"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build Linux x86_64 release
+  prepare:
+    name: Prepare release tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create or validate release tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="$INPUT_VERSION"
+            tag="v$version"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "version must be a semantic version such as 0.1.0" >&2
+              exit 1
+            fi
+          else
+            tag="$REF_NAME"
+            version="${tag#v}"
+          fi
+
+          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          test "$version" = "$cargo_version"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if git rev-parse --verify --quiet "refs/tags/$tag"; then
+              echo "tag $tag already exists" >&2
+              exit 1
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            label: Linux x86_64
+            binary: tickt
+            archive: tickt-linux-x86_64.tar.gz
+            format: tar
+          - os: macos-13
+            target: x86_64-apple-darwin
+            label: macOS Intel
+            binary: tickt
+            archive: tickt-macos-x86_64.tar.gz
+            format: tar
+          - os: macos-14
+            target: aarch64-apple-darwin
+            label: macOS Apple Silicon
+            binary: tickt
+            archive: tickt-macos-aarch64.tar.gz
+            format: tar
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: Windows x86_64
+            binary: tickt.exe
+            archive: tickt-windows-x86_64.zip
+            format: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@1.88.0
-
-      - name: Confirm tag matches Cargo version
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
-        run: |
-          version="${RELEASE_VERSION#v}"
-          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
-          test "$version" = "$cargo_version"
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --locked
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Assemble Linux assets
+      - name: Package release asset
+        shell: bash
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+          ARCHIVE: ${{ matrix.archive }}
+          FORMAT: ${{ matrix.format }}
         run: |
           mkdir -p dist
-          install -m 0755 target/release/tickt dist/tickt-linux-x86_64
-          tar -C dist -czf "dist/tickt-linux-x86_64.tar.gz" tickt-linux-x86_64
-          sha256sum dist/tickt-linux-x86_64 | tee dist/tickt-linux-x86_64.sha256
-          sha256sum dist/tickt-linux-x86_64.tar.gz | tee dist/tickt-linux-x86_64.tar.gz.sha256
+          cp "target/$TARGET/release/$BINARY" "dist/$BINARY"
+          chmod +x "dist/$BINARY"
+          if [[ "$FORMAT" == "zip" ]]; then
+            (cd dist && 7z a "$ARCHIVE" "$BINARY")
+          else
+            tar -C dist -czf "dist/$ARCHIVE" "$BINARY"
+          fi
+          sha256sum "dist/$ARCHIVE" | tee "dist/$ARCHIVE.sha256"
+
+      - name: Upload packaged asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Tickt ${{ needs.prepare.outputs.tag }}
           generate_release_notes: true
           files: dist/*
-
-      - name: Set up Node.js for npm publishing
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-
-      - name: Align npm package version with release tag
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
-        run: npm version "${RELEASE_VERSION#v}" --no-git-tag-version --prefix npm/tickt
-
-      - name: Publish npm Linux installer
-        run: npm publish ./npm/tickt --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
