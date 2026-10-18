@@ -1,0 +1,8 @@
+/target/
+/.cargo-home/
+/.rustup/
+*.db
+*.db-shm
+*.db-wal
+.env
+.DS_Store
