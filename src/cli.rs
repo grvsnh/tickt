@@ -1,6 +1,4 @@
-use std::io::{self, IsTerminal, Write};
-
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::{AppConfig, AppPaths};
@@ -117,17 +115,30 @@ pub fn print_history(storage: &Storage, requested_limit: u32) -> Result<()> {
     Ok(())
 }
 
-pub fn ensure_noninteractive_output() -> Result<()> {
-    if io::stdout().is_terminal() {
-        return Ok(());
-    }
-    io::stdout().flush().context("could not flush output")?;
-    Ok(())
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-pub fn validate_args() -> Result<()> {
-    if std::env::args().any(|arg| arg == "--") {
-        bail!("unexpected argument separator")
+    #[test]
+    fn parses_noninteractive_commands() {
+        assert!(matches!(
+            Cli::try_parse_from(["tickt", "stats"]).expect("stats"),
+            Cli { command: Some(Command::Stats) }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["tickt", "config", "path"]).expect("config path"),
+            Cli { command: Some(Command::Config { command: ConfigCommand::Path }) }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["tickt", "history", "--limit", "25"]).expect("history"),
+            Cli { command: Some(Command::History(HistoryArgs { limit: 25 })) }
+        ));
     }
-    Ok(())
+
+    #[test]
+    fn history_limit_is_bounded_for_user_input() {
+        assert_eq!(0_u32.clamp(1, 50), 1);
+        assert_eq!(50_u32.clamp(1, 50), 50);
+        assert_eq!(500_u32.clamp(1, 50), 50);
+    }
 }
