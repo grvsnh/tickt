@@ -62,7 +62,7 @@ cargo run --locked
 Create the exact release archive locally:
 
 ```sh
-./scripts/package-linux.sh 1.0.0
+./scripts/package-linux.sh
 sha256sum -c dist/release/tickt-linux-x86_64.tar.gz.sha256
 ```
 
@@ -122,7 +122,7 @@ For a new release, update the version in `Cargo.toml`, run the checks, and push 
 git push origin main
 ```
 
-The current release version is `1.0.0`. Do not push another `main` commit without changing the
+The current release version is `1.1.0`. Do not push another `main` commit without changing the
 version after a release tag already exists; the workflow will safely finish as a no-op instead of
 overwriting a release.
 
@@ -160,7 +160,7 @@ static archive on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky Linux, and Alpin
 See [docs/performance.md](docs/performance.md) for the measured statistics optimization, v1.1
 benchmarks, and future profiling targets.
 
-Tickt is intentionally Linux-terminal-only for v1.0. There is no native desktop app or web app.
+Tickt is intentionally Linux-terminal-only for v1.1. There is no native desktop app or web app.
 
 ## OmniRush idea
 

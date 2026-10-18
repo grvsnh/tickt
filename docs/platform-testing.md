@@ -1,6 +1,6 @@
 # Linux release testing
 
-Tickt v1.0 ships one static x86_64 Linux archive. The release workflow builds it once and runs
+Tickt v1.1 ships one static x86_64 Linux archive. The release workflow builds it once and runs
 the extracted binary in representative containers:
 
 - Ubuntu 22.04 and 24.04

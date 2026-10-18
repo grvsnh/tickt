@@ -1,0 +1,26 @@
+Tickt v1.1.0
+
+Performance-focused maintenance release for Linux terminals.
+
+Highlights
+
+- Interactive statistics are accumulated in memory after the initial source-of-truth load,
+  avoiding a full historical scan after every completed session.
+- The terminal UI skips unchanged redraws while retaining timer and clock updates.
+- Added reproducible large-history benchmarks for 100,000 and 1,000,000-session workloads.
+- Added file-backed SQLite write-latency benchmarks covering active-state saves, completion,
+  duplicate completion, and active-state deletion.
+- Added broader statistics, configuration, CLI, timer, and SQLite test coverage.
+- Release packaging and release metadata checks remain deterministic and Linux-only.
+
+Performance
+
+On the development machine, `tickt stats` over 100,000 synthetic sessions measured 44.8 ms
+median in the final v1.1 benchmark run, compared with 104.3 ms before the completed-focus query
+optimization. Results vary by filesystem, CPU, and cache state; the benchmark scripts are included
+so users and maintainers can reproduce them.
+
+Compatibility
+
+Tickt v1.1 remains a static x86_64 Linux terminal application tested across Ubuntu, Debian, Arch,
+Fedora, openSUSE, Rocky Linux, and Alpine containers.

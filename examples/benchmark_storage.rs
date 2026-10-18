@@ -2,7 +2,9 @@ use std::time::Instant;
 
 use chrono::Utc;
 use tempfile::tempdir;
-use tickt::model::{ActiveSessionSnapshot, ActiveStatus, SessionRecord, SessionStatus, SessionType};
+use tickt::model::{
+    ActiveSessionSnapshot, ActiveStatus, SessionRecord, SessionStatus, SessionType,
+};
 use tickt::storage::Storage;
 
 fn percentile(samples: &mut [f64], percentile: f64) -> f64 {
