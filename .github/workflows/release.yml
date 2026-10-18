@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build and publish Linux release
@@ -18,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve version and push release tag
+      - name: Resolve release metadata
         id: resolve
         run: |
           set -euo pipefail
@@ -34,11 +38,6 @@ jobs:
               echo "$release_tag already points to another commit; bump Cargo.toml before pushing main" >&2
               exit 1
             fi
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$release_tag" -m "Release $release_tag"
-            git push origin "$release_tag"
           fi
 
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
@@ -52,6 +51,13 @@ jobs:
 
       - name: Install static Linux linker
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y musl-tools
+
+      - name: Run release quality gate
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked
+          cargo test --locked
+          cargo clippy --locked --all-targets -- -D warnings
 
       - name: Build and package static Linux binary
         run: ./scripts/package-linux.sh "${RELEASE_TAG#v}"
@@ -83,6 +89,16 @@ jobs:
               "$image" \
               /release/tickt --version
           done
+
+      - name: Create and push release tag
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+            git push origin "$RELEASE_TAG"
+          fi
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
