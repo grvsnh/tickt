@@ -198,4 +198,36 @@ mod tests {
         assert_eq!(stats.last_seven_days.first().map(|day| day.date), Some(today - Days::new(6)));
         assert_eq!(stats.last_seven_days.last().map(|day| day.date), Some(today));
     }
+
+    #[test]
+    fn goal_progress_is_percentage_clamped_and_remaining_time_saturates() {
+        let today = NaiveDate::from_ymd_opt(2026, 10, 18).expect("date");
+        let half = record(today, 30, SessionStatus::Completed, SessionType::Focus);
+        let stats = Statistics::calculate(&[half], today, 60);
+        assert_eq!(stats.goal_percent, 50);
+        assert_eq!(stats.remaining_goal_minutes, 30);
+
+        let over = record(today, 90, SessionStatus::Completed, SessionType::Focus);
+        let stats = Statistics::calculate(&[over], today, 60);
+        assert_eq!(stats.goal_percent, 100);
+        assert_eq!(stats.remaining_goal_minutes, 0);
+
+        let stats = Statistics::empty(today, 0);
+        assert_eq!(stats.goal_percent, 0);
+        assert_eq!(stats.remaining_goal_minutes, 0);
+    }
+
+    #[test]
+    fn a_gap_breaks_current_streak_but_not_historical_longest_streak() {
+        let today = NaiveDate::from_ymd_opt(2026, 10, 18).expect("date");
+        let records = vec![
+            record(today, 60, SessionStatus::Completed, SessionType::Focus),
+            record(today - Days::new(2), 60, SessionStatus::Completed, SessionType::Focus),
+            record(today - Days::new(3), 60, SessionStatus::Completed, SessionType::Focus),
+            record(today - Days::new(4), 60, SessionStatus::Completed, SessionType::Focus),
+        ];
+        let stats = Statistics::calculate(&records, today, 60);
+        assert_eq!(stats.current_streak, 1);
+        assert_eq!(stats.longest_streak, 3);
+    }
 }
