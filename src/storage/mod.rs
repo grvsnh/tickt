@@ -300,14 +300,25 @@ mod tests {
     fn focus_record() -> SessionRecord {
         let started_at =
             DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0).expect("current timestamp");
+        record_with("one", started_at, SessionType::Focus, SessionStatus::Completed, 1_500, 1_500)
+    }
+
+    fn record_with(
+        id: &str,
+        started_at: DateTime<Utc>,
+        session_type: SessionType,
+        status: SessionStatus,
+        planned_seconds: i64,
+        actual_seconds: i64,
+    ) -> SessionRecord {
         SessionRecord {
-            id: "one".to_owned(),
-            session_type: SessionType::Focus,
+            id: id.to_owned(),
+            session_type,
             started_at,
-            ended_at: Some(started_at + chrono::Duration::minutes(25)),
-            planned_seconds: 1_500,
-            actual_seconds: 1_500,
-            status: SessionStatus::Completed,
+            ended_at: Some(started_at + chrono::Duration::seconds(actual_seconds)),
+            planned_seconds,
+            actual_seconds,
+            status,
         }
     }
 
@@ -340,5 +351,116 @@ mod tests {
         assert_eq!(storage.load_active().expect("load"), Some(snapshot));
         storage.clear_active().expect("clear");
         assert!(storage.load_active().expect("load").is_none());
+    }
+
+    #[test]
+    fn history_queries_are_ordered_bounded_and_filtered() {
+        let dir = tempdir().expect("tempdir");
+        let storage = Storage::open(&dir.path().join("tickt.db")).expect("open");
+        let base = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).expect("timestamp");
+        let records = [
+            record_with("old", base, SessionType::Focus, SessionStatus::Completed, 60, 60),
+            record_with(
+                "middle",
+                base + chrono::Duration::seconds(60),
+                SessionType::ShortBreak,
+                SessionStatus::Completed,
+                60,
+                60,
+            ),
+            record_with(
+                "new",
+                base + chrono::Duration::seconds(120),
+                SessionType::Focus,
+                SessionStatus::Skipped,
+                60,
+                20,
+            ),
+        ];
+        for record in &records {
+            assert!(storage.insert_session(record).expect("insert"));
+        }
+        let recent = storage.recent_sessions(2).expect("recent");
+        assert_eq!(
+            recent.iter().map(|record| record.id.as_str()).collect::<Vec<_>>(),
+            ["new", "middle"]
+        );
+        let since = storage.records_since(base.timestamp() + 60).expect("since");
+        assert_eq!(
+            since.iter().map(|record| record.id.as_str()).collect::<Vec<_>>(),
+            ["middle", "new"]
+        );
+        assert_eq!(storage.count_completed_focus().expect("count"), 1);
+    }
+
+    #[test]
+    fn finish_session_is_idempotent_and_clears_active_state() {
+        let dir = tempdir().expect("tempdir");
+        let storage = Storage::open(&dir.path().join("tickt.db")).expect("open");
+        let snapshot = ActiveSessionSnapshot {
+            id: "active".to_owned(),
+            session_type: SessionType::Focus,
+            status: ActiveStatus::Running,
+            started_at: Utc::now(),
+            running_since: Some(Utc::now()),
+            planned_seconds: 60,
+            elapsed_seconds: 60,
+        };
+        let record = record_with(
+            "finished",
+            snapshot.started_at,
+            SessionType::Focus,
+            SessionStatus::Completed,
+            60,
+            60,
+        );
+        storage.save_active(&snapshot).expect("active");
+        assert!(storage.finish_session(&record).expect("finish"));
+        assert!(!storage.finish_session(&record).expect("duplicate finish"));
+        assert!(storage.load_active().expect("active load").is_none());
+        assert_eq!(storage.recent_sessions(10).expect("history").len(), 1);
+    }
+
+    #[test]
+    fn migrates_v1_active_timer_schema_and_rejects_unknown_versions() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("v1.db");
+        let connection = Connection::open(&path).expect("open v1");
+        connection
+            .execute_batch(
+                "CREATE TABLE sessions (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    session_type TEXT NOT NULL,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER,
+                    planned_seconds INTEGER NOT NULL,
+                    actual_seconds INTEGER NOT NULL,
+                    status TEXT NOT NULL
+                );
+                CREATE TABLE active_timer (
+                    slot INTEGER PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    session_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    started_at INTEGER NOT NULL,
+                    planned_seconds INTEGER NOT NULL,
+                    elapsed_seconds INTEGER NOT NULL
+                );
+                PRAGMA user_version = 1;",
+            )
+            .expect("create v1");
+        drop(connection);
+        let storage = Storage::open(&path).expect("migrate v1");
+        let version: i64 = storage
+            .connection_for_test()
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("version");
+        assert_eq!(version, 2);
+
+        let unknown = dir.path().join("unknown.db");
+        let connection = Connection::open(&unknown).expect("open unknown");
+        connection.execute_batch("PRAGMA user_version = 99;").expect("set version");
+        drop(connection);
+        assert!(Storage::open(&unknown).is_err());
     }
 }
