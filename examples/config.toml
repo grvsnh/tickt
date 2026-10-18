@@ -1,0 +1,28 @@
+# Copy with `tickt config init`, or use this as a starting point.
+
+[timer]
+focus_minutes = 25
+short_break_minutes = 5
+long_break_minutes = 15
+long_break_interval = 4
+
+[productivity]
+daily_goal_minutes = 100
+
+[ui]
+# Supported values: dark, light, default
+theme = "dark"
+unicode = true
+
+[notifications]
+# Uses notify-send when it is available. Missing desktop services are harmless.
+enabled = true
+# Uses the terminal bell; false by default for quiet terminals.
+sound = false
+
+[recovery]
+# ask, resume (only when the saved timer has not expired), or discard
+on_startup = "ask"
+
+[logging]
+level = "warn"

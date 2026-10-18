@@ -1,0 +1,6 @@
+.git
+.cargo
+.rustup
+target
+*.db
+*.db-*
