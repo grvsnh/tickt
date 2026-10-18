@@ -1,0 +1,36 @@
+Tickt v1.0.0
+
+Make time count.
+
+Tickt is a local-first Pomodoro dashboard for Linux terminals. This first release provides a
+focused, keyboard-driven timer without accounts, cloud services, telemetry, or a background
+daemon.
+
+Highlights
+
+- Monotonic timer engine with focus, short-break, and long-break sessions.
+- Start, pause, resume, reset, skip, and restart recovery flows.
+- Conservative recovery: downtime is never fabricated as completed work.
+- SQLite-backed session history and active timer persistence.
+- Daily focus goals, streaks, seven-day summaries, and total focus statistics.
+- Ratatui dashboard with history, statistics, settings, help, and responsive compact mode.
+- Linux XDG configuration and data paths.
+- Optional best-effort desktop notifications and terminal bell alerts.
+- Static x86_64 Linux release archive tested on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky
+  Linux, and Alpine.
+
+Installation
+
+Download `tickt-linux-x86_64.tar.gz` and its `.sha256` file from this release. Verify the
+checksum, extract the `tickt` binary into a directory on your PATH, and run `tickt`.
+
+Verification
+
+The release quality gate runs formatting, Cargo checks, tests, Clippy, static packaging,
+checksum verification, archive extraction, and noninteractive `--version` smoke tests across
+representative Linux distributions.
+
+Scope
+
+Tickt v1.0 is Linux-terminal-only and targets x86_64 Linux systems. The project is intentionally
+local-first and offline during normal use.

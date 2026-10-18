@@ -24,6 +24,8 @@ jobs:
           set -euo pipefail
           version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
           release_tag="v$version"
+          release_notes="release-notes/$version.txt"
+          test -f "$release_notes"
           current_commit="$(git rev-parse HEAD)"
 
           if git rev-parse --verify --quiet "refs/tags/$release_tag"; then
@@ -40,6 +42,7 @@ jobs:
           fi
 
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_notes=$release_notes" >> "$GITHUB_OUTPUT"
           echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
       - name: Install Rust and musl target
@@ -86,7 +89,9 @@ jobs:
         with:
           tag_name: ${{ steps.resolve.outputs.release_tag }}
           name: Tickt ${{ steps.resolve.outputs.release_tag }}
-          generate_release_notes: true
+          body_path: ${{ steps.resolve.outputs.release_notes }}
+          draft: false
+          prerelease: false
           files: |
             dist/release/tickt-linux-x86_64.tar.gz
             dist/release/tickt-linux-x86_64.tar.gz.sha256
