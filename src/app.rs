@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 
 use crate::config::{AppConfig, AppPaths};
@@ -47,6 +47,7 @@ pub struct App {
     pub(crate) recovery: Option<RecoveryPrompt>,
     pub(crate) persistence_warning: bool,
     pub(crate) history_scroll: usize,
+    stats_date: NaiveDate,
     should_quit: bool,
 }
 
@@ -84,6 +85,7 @@ impl App {
             recovery: None,
             persistence_warning: false,
             history_scroll: 0,
+            stats_date: local_today(),
             should_quit: false,
         };
         app.refresh_data()?;
@@ -112,7 +114,9 @@ impl App {
     fn event_loop(&mut self, terminal: &mut TerminalGuard) -> Result<()> {
         while !self.should_quit {
             let now = Instant::now();
-            self.message = self.message.take();
+            if self.stats_date != local_today() {
+                self.refresh_data()?;
+            }
             if let Some(record) = self.timer.tick(now) {
                 self.complete_session(record)?;
             }
@@ -168,8 +172,22 @@ impl App {
             KeyCode::Char('n') => self.start_next()?,
             KeyCode::Char('b') => self.start_break(SessionType::ShortBreak)?,
             KeyCode::Char('l') => self.start_break(SessionType::LongBreak)?,
-            KeyCode::Char('r') => self.confirmation = Some(ConfirmAction::Reset),
-            KeyCode::Char('s') => self.confirmation = Some(ConfirmAction::Skip),
+            KeyCode::Char('r')
+                if matches!(self.timer.status(), TimerStatus::Running | TimerStatus::Paused) =>
+            {
+                self.confirmation = Some(ConfirmAction::Reset)
+            }
+            KeyCode::Char('r') => {
+                self.message = Some("There is no active session to reset.".to_owned())
+            }
+            KeyCode::Char('s')
+                if matches!(self.timer.status(), TimerStatus::Running | TimerStatus::Paused) =>
+            {
+                self.confirmation = Some(ConfirmAction::Skip)
+            }
+            KeyCode::Char('s') => {
+                self.message = Some("There is no active session to skip.".to_owned())
+            }
             _ => {}
         }
         Ok(())
@@ -226,7 +244,12 @@ impl App {
                 self.persist_active()?;
                 self.message = Some("Recovered the unfinished timer.".to_owned());
             }
-            KeyCode::Char('d') | KeyCode::Char('r') | KeyCode::Esc => self.discard_recovery()?,
+            KeyCode::Char('d') | KeyCode::Char('r') => self.discard_recovery()?,
+            KeyCode::Esc if self.recovery.as_ref().is_some_and(|prompt| !prompt.expired) => {
+                self.recovery = None;
+                self.persist_active()?;
+                self.message = Some("Kept the recovered timer active.".to_owned());
+            }
             _ => {}
         }
         Ok(())
@@ -240,7 +263,9 @@ impl App {
                 self.persist_active()
             }
             TimerStatus::Paused => {
-                self.timer.resume(Instant::now()).map_err(|error| anyhow::anyhow!(error))?;
+                self.timer
+                    .resume(Instant::now(), Utc::now())
+                    .map_err(|error| anyhow::anyhow!(error))?;
                 self.persist_active()
             }
             TimerStatus::Completed => self.start_next(),
@@ -299,18 +324,20 @@ impl App {
 
     fn reset_timer(&mut self) -> Result<()> {
         let result = self.timer.reset(Instant::now()).map_err(|error| anyhow::anyhow!(error))?;
+        let had_record = result.is_some();
         if let Some(record) = result {
-            self.storage.insert_session(&record)?;
+            self.storage.finish_session(&record)?;
         }
-        self.storage.clear_active()?;
+        if !had_record {
+            self.storage.clear_active()?;
+        }
         self.message = Some("Session reset; it will not count as completed work.".to_owned());
         self.refresh_data()
     }
 
     fn skip_timer(&mut self) -> Result<()> {
         let record = self.timer.skip(Instant::now()).map_err(|error| anyhow::anyhow!(error))?;
-        self.storage.insert_session(&record)?;
-        self.storage.clear_active()?;
+        self.storage.finish_session(&record)?;
         self.message = Some("Session skipped; it will not count as completed work.".to_owned());
         self.refresh_data()
     }
@@ -357,6 +384,7 @@ impl App {
             local_today(),
             u32::from(self.config.productivity.daily_goal_minutes),
         );
+        self.stats_date = local_today();
         Ok(())
     }
 

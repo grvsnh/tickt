@@ -21,6 +21,12 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         .render_widget(Block::default().style(Style::default().bg(theme.background)), frame.area());
     if frame.area().width < 64 || frame.area().height < 18 {
         draw_compact(frame, app, theme);
+        if let Some(action) = app.confirmation {
+            draw_confirmation(frame, app, action, theme);
+        }
+        if let Some(recovery) = &app.recovery {
+            draw_recovery(frame, app, recovery.expired, theme);
+        }
         return;
     }
 
@@ -60,7 +66,8 @@ fn draw_header(frame: &mut Frame<'_>, app: &App, area: Rect, theme: Theme) {
     let status = if app.persistence_warning {
         Span::styled("  ! storage warning", Style::default().fg(theme.warning))
     } else {
-        Span::styled("  ● local", Style::default().fg(theme.success))
+        let marker = if app.config.ui.unicode { "● local" } else { "* local" };
+        Span::styled(format!("  {marker}"), Style::default().fg(theme.success))
     };
     line.spans.push(status);
     let paragraph = Paragraph::new(line)
@@ -272,7 +279,12 @@ fn draw_statistics(frame: &mut Frame<'_>, app: &App, area: Rect, theme: Theme) {
         .iter()
         .map(|day| {
             let bar_len = ((day.minutes.min(180) as f64 / 180.0) * 22.0).round() as usize;
-            let bar = format!("{}{}", "█".repeat(bar_len), "·".repeat(22 - bar_len));
+            let (filled, empty) = if app.config.ui.unicode { ('█', '·') } else { ('#', '-') };
+            let bar = format!(
+                "{}{}",
+                filled.to_string().repeat(bar_len),
+                empty.to_string().repeat(22 - bar_len)
+            );
             Line::from(vec![
                 Span::styled(
                     day.date.format("%a %d").to_string(),
@@ -480,9 +492,9 @@ fn draw_recovery(frame: &mut Frame<'_>, _app: &App, expired: bool, theme: Theme)
         Line::from(message),
         Line::from(""),
         Line::from(if expired {
-            "[d/r] record interrupted   [Esc] keep"
+            "[d/r] record interrupted"
         } else {
-            "[r] recover   [d] discard   [Esc] keep"
+            "[r] recover   [d] discard   [Esc] keep active"
         }),
     ])
     .alignment(Alignment::Center)

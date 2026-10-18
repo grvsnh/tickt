@@ -66,6 +66,7 @@ pub struct ActiveSessionSnapshot {
     pub session_type: SessionType,
     pub status: ActiveStatus,
     pub started_at: DateTime<Utc>,
+    pub running_since: Option<DateTime<Utc>>,
     pub planned_seconds: i64,
     pub elapsed_seconds: i64,
 }

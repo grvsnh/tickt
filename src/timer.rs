@@ -46,6 +46,7 @@ struct ActiveTimer {
     total: Duration,
     elapsed_before: Duration,
     running_since: Option<Instant>,
+    running_since_wall: Option<DateTime<Utc>>,
     status: TimerStatus,
     completion_taken: bool,
 }
@@ -152,6 +153,7 @@ impl TimerEngine {
             total: Duration::from_secs(u64::from(minutes) * 60),
             elapsed_before: Duration::ZERO,
             running_since: Some(now),
+            running_since_wall: Some(wall_now),
             status: TimerStatus::Running,
             completion_taken: false,
         });
@@ -172,11 +174,12 @@ impl TimerEngine {
             .saturating_add(now.saturating_duration_since(active.running_since.unwrap_or(now)));
         active.elapsed_before = active.elapsed_before.min(active.total);
         active.running_since = None;
+        active.running_since_wall = None;
         active.status = TimerStatus::Paused;
         Ok(())
     }
 
-    pub fn resume(&mut self, now: Instant) -> Result<(), TicktError> {
+    pub fn resume(&mut self, now: Instant, wall_now: DateTime<Utc>) -> Result<(), TicktError> {
         let active = self.active.as_mut().ok_or_else(|| {
             TicktError::InvalidTransition("there is no paused session to resume".to_owned())
         })?;
@@ -186,6 +189,7 @@ impl TimerEngine {
             ));
         }
         active.running_since = Some(now);
+        active.running_since_wall = Some(wall_now);
         active.status = TimerStatus::Running;
         Ok(())
     }
@@ -285,6 +289,7 @@ impl TimerEngine {
                 ActiveStatus::Paused
             },
             started_at: active.started_at,
+            running_since: active.running_since_wall,
             planned_seconds: active.total.as_secs() as i64,
             elapsed_seconds: self.elapsed_at(active, now).as_secs() as i64,
         })
@@ -307,11 +312,13 @@ impl TimerEngine {
             ));
         }
         let total = Duration::from_secs(snapshot.planned_seconds as u64);
-        let mut elapsed = Duration::from_secs(snapshot.elapsed_seconds as u64).min(total);
+        let saved_elapsed = Duration::from_secs(snapshot.elapsed_seconds as u64).min(total);
+        let mut elapsed = saved_elapsed;
         let expired = if snapshot.status == ActiveStatus::Running {
-            let wall_elapsed = (wall_now - snapshot.started_at).num_seconds().max(0) as u64;
-            elapsed = Duration::from_secs(wall_elapsed).min(total);
-            wall_elapsed >= snapshot.planned_seconds as u64
+            let running_since = snapshot.running_since.unwrap_or(snapshot.started_at);
+            let wall_elapsed = (wall_now - running_since).num_seconds().max(0) as u64;
+            elapsed = saved_elapsed.saturating_add(Duration::from_secs(wall_elapsed)).min(total);
+            elapsed >= total
         } else {
             false
         };
@@ -322,6 +329,8 @@ impl TimerEngine {
             total,
             elapsed_before: elapsed,
             running_since: (snapshot.status == ActiveStatus::Running && !expired).then_some(now),
+            running_since_wall: (snapshot.status == ActiveStatus::Running && !expired)
+                .then_some(wall_now),
             status: if expired {
                 TimerStatus::Paused
             } else if snapshot.status == ActiveStatus::Running {
@@ -395,7 +404,7 @@ mod tests {
         timer.start_focus(base, Utc::now()).expect("start");
         timer.pause(base + Duration::from_secs(10)).expect("pause");
         assert_eq!(timer.status(), TimerStatus::Paused);
-        timer.resume(base + Duration::from_secs(20)).expect("resume");
+        timer.resume(base + Duration::from_secs(20), Utc::now()).expect("resume");
         let record = timer.reset(base + Duration::from_secs(25)).expect("reset");
         assert_eq!(record.expect("record").status, SessionStatus::Reset);
         assert_eq!(timer.status(), TimerStatus::Idle);
@@ -423,6 +432,7 @@ mod tests {
             session_type: SessionType::Focus,
             status: ActiveStatus::Running,
             started_at: Utc::now() - chrono::Duration::seconds(90),
+            running_since: None,
             planned_seconds: 60,
             elapsed_seconds: 10,
         };
@@ -430,5 +440,25 @@ mod tests {
         assert!(expired);
         assert_eq!(timer.status(), TimerStatus::Paused);
         assert_eq!(timer.display(Instant::now()).remaining, Duration::ZERO);
+    }
+
+    #[test]
+    fn restart_recovery_excludes_time_spent_paused_before_resume() {
+        let base_wall = Utc::now();
+        let mut timer = engine();
+        let snapshot = ActiveSessionSnapshot {
+            id: "session".to_owned(),
+            session_type: SessionType::Focus,
+            status: ActiveStatus::Running,
+            started_at: base_wall - chrono::Duration::seconds(900),
+            running_since: Some(base_wall),
+            planned_seconds: 300,
+            elapsed_seconds: 60,
+        };
+        let now = Instant::now();
+        let expired = timer.restore(snapshot, now, base_wall).expect("restore");
+        assert!(!expired);
+        assert_eq!(timer.display(now).elapsed, Duration::from_secs(60));
+        assert_eq!(timer.display(now + Duration::from_secs(20)).elapsed, Duration::from_secs(80));
     }
 }

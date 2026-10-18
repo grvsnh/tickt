@@ -59,7 +59,7 @@ impl Storage {
     pub fn records_since(&self, timestamp: i64) -> Result<Vec<SessionRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT id, session_type, started_at, ended_at, planned_seconds, actual_seconds, status
-             FROM sessions WHERE started_at >= ?1 ORDER BY started_at ASC LIMIT 20000",
+             FROM sessions WHERE started_at >= ?1 ORDER BY started_at ASC",
         )?;
         let rows = statement.query_map([timestamp], decode_record)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().context("could not read statistics records")
@@ -84,7 +84,7 @@ impl Storage {
     pub fn load_active(&self) -> Result<Option<ActiveSessionSnapshot>> {
         self.connection
             .query_row(
-                "SELECT session_id, session_type, state, started_at, planned_seconds, elapsed_seconds
+                "SELECT session_id, session_type, state, started_at, planned_seconds, elapsed_seconds, running_since
                  FROM active_timer WHERE slot = 1",
                 [],
                 decode_active,
@@ -134,12 +134,18 @@ fn migrate(connection: &Connection) -> Result<()> {
                 state TEXT NOT NULL CHECK (state IN ('running', 'paused')),
                 started_at INTEGER NOT NULL,
                 planned_seconds INTEGER NOT NULL CHECK (planned_seconds > 0),
-                elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds >= 0)
-            );
-            PRAGMA user_version = 1;",
+                elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds >= 0),
+                running_since INTEGER
+             );
+             PRAGMA user_version = 2;",
         )?;
         transaction.commit().context("could not commit initial schema")?;
-    } else if version != 1 {
+    } else if version == 1 {
+        let transaction = connection.unchecked_transaction()?;
+        transaction.execute("ALTER TABLE active_timer ADD COLUMN running_since INTEGER", [])?;
+        transaction.execute_batch("PRAGMA user_version = 2;")?;
+        transaction.commit().context("could not migrate active timer schema")?;
+    } else if version != 2 {
         bail!("unsupported database schema version {version}");
     }
     Ok(())
@@ -174,8 +180,8 @@ fn save_active_in_transaction(
     transaction.execute("DELETE FROM active_timer WHERE slot = 1", [])?;
     transaction.execute(
         "INSERT INTO active_timer
-         (slot, session_id, session_type, state, started_at, planned_seconds, elapsed_seconds)
-         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
+         (slot, session_id, session_type, state, started_at, planned_seconds, elapsed_seconds, running_since)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             snapshot.id,
             encode_session_type(snapshot.session_type),
@@ -183,6 +189,7 @@ fn save_active_in_transaction(
             snapshot.started_at.timestamp(),
             snapshot.planned_seconds,
             snapshot.elapsed_seconds,
+            snapshot.running_since.map(|value| value.timestamp()),
         ],
     )?;
     Ok(())
@@ -210,6 +217,7 @@ fn decode_active(row: &rusqlite::Row<'_>) -> rusqlite::Result<ActiveSessionSnaps
         started_at: timestamp(row.get(3)?)?,
         planned_seconds: row.get(4)?,
         elapsed_seconds: row.get(5)?,
+        running_since: row.get::<_, Option<i64>>(6)?.map(timestamp).transpose()?,
     })
 }
 
@@ -324,6 +332,7 @@ mod tests {
             status: ActiveStatus::Paused,
             started_at: DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0)
                 .expect("current timestamp"),
+            running_since: None,
             planned_seconds: 1_500,
             elapsed_seconds: 30,
         };

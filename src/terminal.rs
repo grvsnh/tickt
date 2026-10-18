@@ -23,7 +23,15 @@ impl TerminalGuard {
             return Err(error).context("could not enter the alternate screen");
         }
         let backend = CrosstermBackend::new(stdout);
-        let terminal = Terminal::new(backend).context("could not initialize terminal")?;
+        let terminal = match Terminal::new(backend) {
+            Ok(terminal) => terminal,
+            Err(error) => {
+                let mut stdout = io::stdout();
+                let _ = execute!(stdout, Show, LeaveAlternateScreen);
+                let _ = disable_raw_mode();
+                return Err(error).context("could not initialize terminal");
+            }
+        };
         Ok(Self { terminal })
     }
 }

@@ -56,6 +56,22 @@ SQLite is compiled through `rusqlite`'s bundled feature, so a system SQLite deve
 is not required. The included `Dockerfile` installs the build prerequisites and produces the
 release binary in a Linux container.
 
+To build and run the container image with persistent local data:
+
+```sh
+docker build -t tickt:local .
+docker run --rm -it \
+  -e XDG_CONFIG_HOME=/root/.config \
+  -e XDG_DATA_HOME=/root/.local/share \
+  -v "$HOME/.config/tickt:/root/.config/tickt" \
+  -v "$HOME/.local/share/tickt:/root/.local/share/tickt" \
+  tickt:local
+```
+
+The container command is interactive and does not provide desktop notifications from the host;
+the terminal timer and SQLite history still work. Docker is an optional reproducible build path,
+not a required runtime dependency.
+
 For a local checkout, `cargo run --locked` launches Tickt immediately with default settings.
 
 ## CLI
@@ -121,7 +137,7 @@ daily_goal_minutes = 100
 
 [ui]
 theme = "dark" # dark, light, default
-unicode = true
+unicode = true # set false for ASCII-friendly progress bars
 ```
 
 Durations are validated on startup. Focus and long-break durations may be 1–240 minutes;
