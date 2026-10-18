@@ -7,7 +7,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::config::{AppConfig, AppPaths};
 use crate::model::{SessionRecord, SessionType};
 use crate::notifications;
-use crate::statistics::{Statistics, local_today};
+use crate::statistics::{FocusAccumulator, Statistics, local_today};
 use crate::storage::Storage;
 use crate::terminal::TerminalGuard;
 use crate::timer::{TimerEngine, TimerStatus};
@@ -42,6 +42,7 @@ pub struct App {
     pub(crate) view: View,
     pub(crate) history: Vec<SessionRecord>,
     pub(crate) stats: Statistics,
+    focus_accumulator: FocusAccumulator,
     pub(crate) message: Option<String>,
     pub(crate) confirmation: Option<ConfirmAction>,
     pub(crate) recovery: Option<RecoveryPrompt>,
@@ -79,6 +80,7 @@ impl App {
             view: View::Dashboard,
             history: Vec::new(),
             stats: Statistics::empty(local_today(), 0),
+            focus_accumulator: FocusAccumulator::default(),
             message: None,
             confirmation: None,
             recovery: None,
@@ -115,7 +117,7 @@ impl App {
         while !self.should_quit {
             let now = Instant::now();
             if self.stats_date != local_today() {
-                self.refresh_data()?;
+                self.refresh_statistics();
             }
             if let Some(record) = self.timer.tick(now) {
                 self.complete_session(record)?;
@@ -332,18 +334,25 @@ impl App {
             self.storage.clear_active()?;
         }
         self.message = Some("Session reset; it will not count as completed work.".to_owned());
-        self.refresh_data()
+        self.refresh_history()?;
+        self.refresh_statistics();
+        Ok(())
     }
 
     fn skip_timer(&mut self) -> Result<()> {
         let record = self.timer.skip(Instant::now()).map_err(|error| anyhow::anyhow!(error))?;
         self.storage.finish_session(&record)?;
         self.message = Some("Session skipped; it will not count as completed work.".to_owned());
-        self.refresh_data()
+        self.refresh_history()?;
+        self.refresh_statistics();
+        Ok(())
     }
 
     fn complete_session(&mut self, record: SessionRecord) -> Result<()> {
-        self.storage.finish_session(&record)?;
+        let changed = self.storage.finish_session(&record)?;
+        if changed {
+            self.focus_accumulator.add_session(&record);
+        }
         if let Some(warning) =
             notifications::session_complete(&self.config.notifications, record.session_type)
         {
@@ -351,7 +360,9 @@ impl App {
         } else {
             self.message = Some(format!("{} complete.", record.session_type.label()));
         }
-        self.refresh_data()
+        self.refresh_history()?;
+        self.refresh_statistics();
+        Ok(())
     }
 
     fn discard_recovery(&mut self) -> Result<()> {
@@ -364,7 +375,9 @@ impl App {
         }
         self.recovery = None;
         self.message = Some("Unfinished session recorded as interrupted.".to_owned());
-        self.refresh_data()
+        self.refresh_history()?;
+        self.refresh_statistics();
+        Ok(())
     }
 
     fn persist_active(&mut self) -> Result<()> {
@@ -377,15 +390,25 @@ impl App {
     }
 
     fn refresh_data(&mut self) -> Result<()> {
-        self.history = self.storage.recent_sessions(100)?;
+        self.refresh_history()?;
         let records = self.storage.completed_focus_since(0)?;
-        self.stats = Statistics::calculate_focus(
-            &records,
+        self.focus_accumulator = FocusAccumulator::from_completions(&records);
+        self.refresh_statistics();
+        Ok(())
+    }
+
+    fn refresh_history(&mut self) -> Result<()> {
+        self.history = self.storage.recent_sessions(100)?;
+        Ok(())
+    }
+
+    fn refresh_statistics(&mut self) {
+        self.stats = Statistics::from_accumulator(
+            &self.focus_accumulator,
             local_today(),
             u32::from(self.config.productivity.daily_goal_minutes),
         );
         self.stats_date = local_today();
-        Ok(())
     }
 
     fn quit(&mut self) -> Result<()> {
