@@ -5,11 +5,12 @@ Thanks for helping make time count.
 ## Development setup
 
 Tickt is a Rust 1.88.0 binary crate. The repository pins the toolchain in
-`rust-toolchain.toml`. Build from the project root:
+`rust-toolchain.toml`. From a fresh checkout, fetch dependencies once, then use the canonical
+quality target:
 
 ```sh
-cargo check --locked
-cargo test --locked --offline
+cargo fetch --locked
+make quality
 ```
 
 The first dependency download may require network access. Normal application use does not.
@@ -18,12 +19,9 @@ The first dependency download may require network access. Normal application use
 
 Before opening a pull request, run:
 
-```sh
-cargo fmt --all -- --check
-cargo check --locked
-cargo test --locked --offline
-cargo clippy --locked --all-targets -- -D warnings
-```
+`make quality` runs formatting, locked checking, offline tests, and Clippy with warnings denied.
+Use `make release-check` to build, checksum, extract, and execute the static Linux release
+archive locally.
 
 ## Architecture boundaries
 
@@ -35,7 +33,8 @@ cargo clippy --locked --all-targets -- -D warnings
 - `ui/` renders application state and must not make database changes.
 
 Keep domain behavior independent of Ratatui and Crossterm where possible. Add deterministic
-tests for timer, statistics, configuration, or storage behavior that changes.
+tests for timer, statistics, configuration, or storage behavior that changes. Update the example
+configuration and `docs/configuration.md` when the public TOML contract changes.
 
 ## Database migrations
 

@@ -99,7 +99,7 @@ tickt config path
 The complete configuration example is in `examples/config.toml`. Defaults are 25-minute focus,
 5-minute short break, 15-minute long break, and a 100-minute daily goal. Only fully completed
 focus sessions count toward statistics; skipped, reset, interrupted, partial, and break sessions
-do not count.
+do not count. See [docs/configuration.md](docs/configuration.md) for ranges and every field.
 
 An active timer is saved locally. A paused timer stays paused after restart. A timer that expired
 while Tickt was closed is recorded as interrupted rather than fabricated as completed work.
