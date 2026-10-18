@@ -68,18 +68,18 @@ sha256sum -c dist/release/tickt-linux-x86_64.tar.gz.sha256
 
 ## Controls
 
-| Key | Action |
-| --- | --- |
-| `Space` | Start, pause, or resume |
-| `n` | Start the suggested next session |
-| `b` / `l` | Start a short / long break |
-| `r` / `s` | Confirm before reset / skip |
-| `h` | History |
-| `t` | Statistics |
-| `,` | Settings |
-| `?` | Help |
-| `Esc` / `d` | Dashboard |
-| `q` | Confirm and quit |
+| Key         | Action                           |
+| ----------- | -------------------------------- |
+| `Space`     | Start, pause, or resume          |
+| `n`         | Start the suggested next session |
+| `b` / `l`   | Start a short / long break       |
+| `r` / `s`   | Confirm before reset / skip      |
+| `h`         | History                          |
+| `t`         | Statistics                       |
+| `,`         | Settings                         |
+| `?`         | Help                             |
+| `Esc` / `d` | Dashboard                        |
+| `q`         | Confirm and quit                 |
 
 ## Configuration and data
 
@@ -157,7 +157,3 @@ Tickt is intentionally Linux-terminal-only for v1.0. There is no native desktop 
 Tickt is independent today. A future OmniRush feature could provide an inbuilt terminal focus
 mode that combines the active OmniRush task, a Pomodoro timer, and local summaries. This is only
 an idea for OmniRush developers; Tickt makes no OmniRush calls and requires no OmniRush install.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
