@@ -76,6 +76,16 @@ not a required runtime dependency.
 
 For a local checkout, `cargo run --locked` launches Tickt immediately with default settings.
 
+To create exactly the same Linux archive and checksum that the release workflow publishes:
+
+```sh
+./scripts/package-linux.sh 1.0.0
+# or: make release
+sha256sum -c dist/release/tickt-linux-x86_64.tar.gz.sha256
+tar -xzf dist/release/tickt-linux-x86_64.tar.gz
+./tickt --version
+```
+
 ### Release binaries
 
 Tagged GitHub releases provide a Linux x86_64 archive. The binary is a glibc Linux executable,
@@ -261,8 +271,9 @@ never inserts fake completions or sample history.
 ## Release process
 
 Releases can be created automatically from the GitHub Actions UI by running the `Release`
-workflow and entering `1.0.0`. The workflow creates and pushes the `v1.0.0` tag itself. The
-traditional command-line path also works:
+workflow and entering `1.0.0`. The workflow creates and pushes the `v1.0.0` tag itself, then
+builds the archive and publishes the release in the same workflow run. The traditional
+command-line path also works:
 
 ```sh
 git tag v1.0.0
@@ -273,6 +284,11 @@ The workflow in `.github/workflows/release.yml` verifies the version against `Ca
 one optimized Linux x86_64 archive, checks the extracted binary in Arch Linux and Fedora
 containers, generates a SHA-256 file, and publishes it to the GitHub release. No npm account or
 token is required. The first v1.0 release has not been published from this checkout yet.
+
+If a manually triggered workflow only creates a tag and does not build, check the `Create release
+tag` job. The workflow now installs no Rust toolchain in that tag-only job; it validates the
+manifest with `awk`, creates the tag, and the dependent build job runs in the same workflow. A
+direct tag push also starts the build path.
 
 ## OmniRush integration idea
 

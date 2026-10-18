@@ -19,4 +19,4 @@ run:
 	cargo run --locked
 
 release:
-	cargo build --release --locked
+	./scripts/package-linux.sh

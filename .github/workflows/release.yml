@@ -15,15 +15,14 @@ permissions:
   contents: write
 
 jobs:
-  prepare:
-    name: Prepare release tag
+  tag:
+    name: Create release tag
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     outputs:
-      version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
     steps:
-      - name: Check out source
+      - name: Check out main
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -33,71 +32,71 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           version="$INPUT_VERSION"
           tag="v$version"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "version must be a semantic version such as 1.0.0" >&2
             exit 1
           fi
-          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          cargo_version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
           test "$version" = "$cargo_version"
           if git rev-parse --verify --quiet "refs/tags/$tag"; then
-            echo "tag $tag already exists" >&2
-            exit 1
+            tagged_commit="$(git rev-list -n 1 "refs/tags/$tag")"
+            current_commit="$(git rev-parse HEAD)"
+            if [[ "$tagged_commit" != "$current_commit" ]]; then
+              echo "$tag already exists on a different commit" >&2
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "Release $tag"
-          git push origin "$tag"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build Linux x86_64 release
-    if: always() && (github.event_name == 'push' || needs.prepare.result == 'success')
-    needs: prepare
+    if: always() && (github.event_name == 'push' || needs.tag.result == 'success')
+    needs: tag
     runs-on: ubuntu-22.04
     steps:
       - name: Check out release source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
+          ref: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@1.88.0
 
       - name: Confirm Cargo version matches tag
         env:
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
         run: |
+          set -euo pipefail
           version="${RELEASE_TAG#v}"
           cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$version" = "$cargo_version"
 
-      - name: Build release binary
-        run: cargo build --release --locked
-
-      - name: Package archive and checksum
-        run: |
-          mkdir -p dist/package
-          cp target/release/tickt dist/package/tickt
-          chmod 0755 dist/package/tickt
-          tar -C dist/package -czf dist/tickt-linux-x86_64.tar.gz tickt
-          (cd dist && sha256sum tickt-linux-x86_64.tar.gz > tickt-linux-x86_64.tar.gz.sha256)
+      - name: Build and package Linux release
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
+        run: ./scripts/package-linux.sh "${RELEASE_TAG#v}"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: tickt-linux-x86_64
           path: |
-            dist/tickt-linux-x86_64.tar.gz
-            dist/tickt-linux-x86_64.tar.gz.sha256
+            dist/release/tickt-linux-x86_64.tar.gz
+            dist/release/tickt-linux-x86_64.tar.gz.sha256
           if-no-files-found: error
 
   linux-distro-smoke:
     name: Verify release on Arch and Fedora
-    if: always() && (github.event_name == 'push' || needs.prepare.result == 'success')
-    needs: [prepare, build]
+    if: always() && (github.event_name == 'push' || needs.tag.result == 'success')
+    needs: [tag, build]
     runs-on: ubuntu-22.04
     steps:
       - name: Download release artifact
@@ -108,12 +107,14 @@ jobs:
 
       - name: Verify checksum and extract archive
         run: |
+          set -euo pipefail
           (cd dist && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
           mkdir extracted
           tar -xzf dist/tickt-linux-x86_64.tar.gz -C extracted
 
       - name: Run extracted binary in Arch and Fedora
         run: |
+          set -euo pipefail
           for image in archlinux:latest fedora:latest; do
             docker run --rm \
               --volume "$GITHUB_WORKSPACE/extracted:/release:ro" \
@@ -123,8 +124,8 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    if: always() && (github.event_name == 'push' || needs.prepare.result == 'success')
-    needs: [prepare, build, linux-distro-smoke]
+    if: always() && (github.event_name == 'push' || needs.tag.result == 'success')
+    needs: [tag, build, linux-distro-smoke]
     runs-on: ubuntu-22.04
     steps:
       - name: Download release artifact
@@ -136,7 +137,7 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
-          name: Tickt ${{ github.event_name == 'push' && github.ref_name || needs.prepare.outputs.tag }}
+          tag_name: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
+          name: Tickt ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
           generate_release_notes: true
           files: dist/*
