@@ -42,16 +42,37 @@ jobs:
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-unknown-linux-musl
 
-      - name: Build Linux release once
-        run: cargo build --release --locked
+      - name: Install static Linux linker
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y musl-tools
 
-      - name: Run binary in Arch and Fedora
+      - name: Build portable Linux release once
+        run: ./scripts/package-linux.sh 1.0.0
+
+      - name: Verify checksum and extract archive
         run: |
-          for image in archlinux:latest fedora:latest; do
+          set -euo pipefail
+          (cd dist/release && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
+          mkdir extracted
+          tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C extracted
+
+      - name: Run binary in representative Linux distributions
+        run: |
+          set -euo pipefail
+          for image in \
+            ubuntu:22.04 \
+            ubuntu:24.04 \
+            debian:bullseye-slim \
+            debian:bookworm-slim \
+            archlinux:latest \
+            fedora:latest \
+            opensuse/leap:15.6 \
+            rockylinux:9 \
+            alpine:3.20; do
             docker run --rm \
-              --volume "$GITHUB_WORKSPACE:/work:ro" \
-              --workdir /work \
+              --volume "$GITHUB_WORKSPACE/extracted:/release:ro" \
               "$image" \
-              /work/target/release/tickt --version
+              /release/tickt --version
           done

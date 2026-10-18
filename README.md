@@ -76,21 +76,27 @@ not a required runtime dependency.
 
 For a local checkout, `cargo run --locked` launches Tickt immediately with default settings.
 
-To create exactly the same Linux archive and checksum that the release workflow publishes:
+To create exactly the same portable Linux archive and checksum that the release workflow
+publishes:
 
 ```sh
+# Debian/Ubuntu build host:
+sudo apt install musl-tools
+rustup target add x86_64-unknown-linux-musl
+
 ./scripts/package-linux.sh 1.0.0
 # or: make release
 sha256sum -c dist/release/tickt-linux-x86_64.tar.gz.sha256
-tar -xzf dist/release/tickt-linux-x86_64.tar.gz
-./tickt --version
+mkdir -p /tmp/tickt-v1
+tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C /tmp/tickt-v1
+/tmp/tickt-v1/tickt --version
 ```
 
 ### Release binaries
 
-Tagged GitHub releases provide a Linux x86_64 archive. The binary is a glibc Linux executable,
-not an Ubuntu-only package: it is intended to run on Ubuntu, Debian, Arch Linux, Fedora, and
-other current x86_64 glibc distributions. Download the archive from
+Tagged GitHub releases provide one statically linked Linux x86_64 archive. It is not an
+Ubuntu-only package: the same binary is tested on Ubuntu, Debian, Arch Linux, Fedora, openSUSE,
+Rocky Linux, and Alpine. Download the archive from
 <https://github.com/grvsnh/tickt/releases>, extract it, and run `tickt --help`.
 
 On Linux, put the binary on your PATH:
@@ -102,20 +108,21 @@ install -m 0755 tickt "$HOME/.local/bin/tickt"
 tickt --version
 ```
 
-Arch Linux and Fedora users do not need an AUR package, COPR repository, or npm. The release
-archive is the installation format:
+Linux users do not need an AUR package, COPR repository, distro-specific package, or npm. The
+release archive is the installation format:
 
 ```sh
-# Arch or Fedora, after downloading the Linux archive
+# Any supported Linux distribution, after downloading the Linux archive
 tar -xzf tickt-linux-x86_64.tar.gz
 mkdir -p "$HOME/.local/bin"
 install -m 0755 tickt "$HOME/.local/bin/tickt"
 tickt --version
 ```
 
-For source builds, Arch needs `base-devel` and the pinned Rust toolchain; Fedora needs a C/C++
-toolchain, `make`, and the pinned Rust toolchain. The bundled SQLite build means a system SQLite
-development package and `pkg-config` are not required.
+For source builds, Arch needs `base-devel`, Fedora needs a C/C++ toolchain and `make`, and Debian
+or Ubuntu needs `build-essential`. The bundled SQLite build means a system SQLite development
+package and `pkg-config` are not required. Creating the portable release locally additionally
+needs `musl-tools` and the Rust target `x86_64-unknown-linux-musl`.
 
 ### Windows through WSL2
 
@@ -140,8 +147,8 @@ tickt --version
 ```
 
 WSL is treated as Linux: configuration and history stay inside the WSL home directory under the
-XDG paths. Desktop notifications are optional and depend on the WSL environment. A native
-Windows build can be added later without changing the timer or storage model.
+XDG paths. Desktop notifications are optional and depend on the WSL environment. The release
+binary is static, so it does not depend on Ubuntu-specific shared libraries.
 
 ## CLI
 
@@ -281,14 +288,14 @@ git push origin v1.0.0
 ```
 
 The workflow in `.github/workflows/release.yml` verifies the version against `Cargo.toml`, builds
-one optimized Linux x86_64 archive, checks the extracted binary in Arch Linux and Fedora
-containers, generates a SHA-256 file, and publishes it to the GitHub release. No npm account or
-token is required. The first v1.0 release has not been published from this checkout yet.
+one optimized static Linux x86_64 archive, checks the extracted binary across representative
+Linux distributions, generates a SHA-256 file, and publishes it to the GitHub release. No npm
+account or token is required. The first v1.0 release has not been published from this checkout
+yet.
 
-If a manually triggered workflow only creates a tag and does not build, check the `Create release
-tag` job. The workflow now installs no Rust toolchain in that tag-only job; it validates the
-manifest with `awk`, creates the tag, and the dependent build job runs in the same workflow. A
-direct tag push also starts the build path.
+The release is intentionally one job: tag creation, Rust installation, build, archive verification,
+distro smoke tests, and GitHub publishing all happen in the same run. This avoids a skipped
+dependent build when a manual workflow creates a tag. A direct tag push also starts the same path.
 
 ## OmniRush integration idea
 
@@ -330,12 +337,12 @@ the manual terminal checklist.
 
 ## Current limitations
 
-- Release artifacts target Linux x86_64 glibc distributions. Windows users should use WSL2 until
-  a native Windows build is added.
+- Release artifacts target Linux x86_64 distributions through a static musl-linked binary.
+  Windows users should use WSL2 until a native Windows build is added.
 - There is no published v1.0 release artifact from this checkout yet, and no package-manager
   formula, sync service, or remote API.
 - Interactive behavior is implemented with Crossterm, while CI smoke-tests the noninteractive
-  CLI on the Linux release binary in Arch Linux and Fedora containers.
+  CLI on the Linux release binary across representative distro containers.
 - Perfect monotonic continuity is impossible across a process restart; recovery uses wall-clock
   timestamps and intentionally avoids fabricating completed work.
 - Visual verification requires a real terminal. Automated tests cover the domain and persistence

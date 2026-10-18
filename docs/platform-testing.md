@@ -1,13 +1,11 @@
 # Release platform testing
 
-Tickt v1.0 is a Linux-first release. The release workflow builds one optimized
-`x86_64-unknown-linux-gnu` binary and checks the extracted archive in current Arch Linux and
-Fedora containers. This keeps release time short while covering the main Linux distribution
-families without compiling the same Rust application repeatedly.
+Tickt v1.0 is a Linux-first release. The release workflow builds one optimized, statically linked
+`x86_64-unknown-linux-musl` binary and checks the extracted archive across representative Linux
+distributions. This covers distro families without compiling the same Rust application repeatedly.
 
-The release artifact is intended for current x86_64 glibc distributions, including Ubuntu,
-Debian, Arch Linux, Fedora, and similar systems. It is not an Alpine/musl artifact and does not
-provide a native Windows `.exe`.
+The release artifact is intended for x86_64 Linux distributions, including Ubuntu, Debian, Arch
+Linux, Fedora, openSUSE, Rocky Linux, and Alpine. It does not provide a native Windows `.exe`.
 
 ## Linux terminals
 
@@ -22,18 +20,22 @@ Test in GNOME Terminal, Konsole, Alacritty, Foot, or another xterm-compatible te
 Start, pause, resume, skip, reset, resize the window, open history/statistics/help, quit, and
 relaunch. Confirm that the shell is not left in raw mode.
 
-## Arch Linux and Fedora compatibility
+## Linux distribution compatibility
 
 CI builds the release binary once on Ubuntu 22.04, extracts the archive, then runs that same
-binary in both Arch Linux and Fedora containers. This verifies that the release is not dependent
-on Ubuntu-only runtime files.
+static binary in Ubuntu 22.04/24.04, Debian Bullseye/Bookworm, Arch Linux, Fedora, openSUSE
+Leap, Rocky Linux, and Alpine containers. This verifies that the release is not dependent on
+Ubuntu-only runtime files or glibc shared libraries.
 
 When Docker is available locally:
 
 ```sh
-cargo build --release --locked
-docker run --rm -v "$PWD:/work:ro" -w /work archlinux:latest /work/target/release/tickt --version
-docker run --rm -v "$PWD:/work:ro" -w /work fedora:latest /work/target/release/tickt --version
+./scripts/package-linux.sh 1.0.0
+mkdir -p /tmp/tickt-release-check
+tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C /tmp/tickt-release-check
+for image in ubuntu:22.04 debian:bookworm-slim archlinux:latest fedora:latest alpine:3.20; do
+  docker run --rm -v /tmp/tickt-release-check:/release:ro "$image" /release/tickt --version
+done
 ```
 
 ## Windows via WSL2

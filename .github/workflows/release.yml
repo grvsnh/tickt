@@ -15,129 +15,101 @@ permissions:
   contents: write
 
 jobs:
-  tag:
-    name: Create release tag
-    if: github.event_name == 'workflow_dispatch'
+  release:
+    name: Build and publish Linux release
     runs-on: ubuntu-22.04
-    outputs:
-      tag: ${{ steps.release.outputs.tag }}
     steps:
-      - name: Check out main
+      - name: Check out source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Validate version and create tag
-        id: release
+      - name: Resolve and create release tag
+        id: resolve
         env:
+          EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          version="$INPUT_VERSION"
-          tag="v$version"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "version must be a semantic version such as 1.0.0" >&2
-            exit 1
-          fi
-          cargo_version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
-          test "$version" = "$cargo_version"
-          if git rev-parse --verify --quiet "refs/tags/$tag"; then
-            tagged_commit="$(git rev-list -n 1 "refs/tags/$tag")"
-            current_commit="$(git rev-parse HEAD)"
-            if [[ "$tagged_commit" != "$current_commit" ]]; then
-              echo "$tag already exists on a different commit" >&2
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="$INPUT_VERSION"
+            release_tag="v$version"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "version must be a semantic version such as 1.0.0" >&2
               exit 1
             fi
+            cargo_version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
+            test "$version" = "$cargo_version"
+            current_commit="$(git rev-parse HEAD)"
+            if git rev-parse --verify --quiet "refs/tags/$release_tag"; then
+              tagged_commit="$(git rev-list -n 1 "refs/tags/$release_tag")"
+              test "$tagged_commit" = "$current_commit"
+            else
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git tag -a "$release_tag" -m "Release $release_tag"
+              git push origin "$release_tag"
+            fi
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$tag" -m "Release $tag"
-            git push origin "$tag"
+            release_tag="$REF_NAME"
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
-  build:
-    name: Build Linux x86_64 release
-    if: always() && (github.event_name == 'push' || needs.tag.result == 'success')
-    needs: tag
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
-
-      - name: Install pinned Rust toolchain
+      - name: Install Rust and musl toolchain
         uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install static Linux linker
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y musl-tools
 
       - name: Confirm Cargo version matches tag
-        env:
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
           cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$version" = "$cargo_version"
 
-      - name: Build and package Linux release
-        env:
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
+      - name: Build and package portable Linux release
         run: ./scripts/package-linux.sh "${RELEASE_TAG#v}"
 
-      - name: Upload release artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tickt-linux-x86_64
-          path: |
-            dist/release/tickt-linux-x86_64.tar.gz
-            dist/release/tickt-linux-x86_64.tar.gz.sha256
-          if-no-files-found: error
-
-  linux-distro-smoke:
-    name: Verify release on Arch and Fedora
-    if: always() && (github.event_name == 'push' || needs.tag.result == 'success')
-    needs: [tag, build]
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Download release artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tickt-linux-x86_64
-          path: dist
-
-      - name: Verify checksum and extract archive
+      - name: Verify release checksum and extract archive
         run: |
           set -euo pipefail
-          (cd dist && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
+          (cd dist/release && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
           mkdir extracted
-          tar -xzf dist/tickt-linux-x86_64.tar.gz -C extracted
+          tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C extracted
+          file extracted/tickt
+          extracted/tickt --version
 
-      - name: Run extracted binary in Arch and Fedora
+      - name: Smoke-test representative Linux distributions
         run: |
           set -euo pipefail
-          for image in archlinux:latest fedora:latest; do
+          for image in \
+            ubuntu:22.04 \
+            ubuntu:24.04 \
+            debian:bullseye-slim \
+            debian:bookworm-slim \
+            archlinux:latest \
+            fedora:latest \
+            opensuse/leap:15.6 \
+            rockylinux:9 \
+            alpine:3.20; do
+            echo "Testing $image"
             docker run --rm \
               --volume "$GITHUB_WORKSPACE/extracted:/release:ro" \
               "$image" \
               /release/tickt --version
           done
 
-  publish:
-    name: Publish GitHub release
-    if: always() && (github.event_name == 'push' || needs.tag.result == 'success')
-    needs: [tag, build, linux-distro-smoke]
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Download release artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tickt-linux-x86_64
-          path: dist
-
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
-          name: Tickt ${{ github.event_name == 'push' && github.ref_name || needs.tag.outputs.tag }}
+          tag_name: ${{ steps.resolve.outputs.release_tag }}
+          name: Tickt ${{ steps.resolve.outputs.release_tag }}
           generate_release_notes: true
-          files: dist/*
+          files: |
+            dist/release/tickt-linux-x86_64.tar.gz
+            dist/release/tickt-linux-x86_64.tar.gz.sha256
