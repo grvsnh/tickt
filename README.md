@@ -13,10 +13,11 @@ Fedora, openSUSE, Rocky Linux, and Alpine. Download the latest archive from:
 <https://github.com/grvsnh/tickt/releases>
 
 ```sh
+release_url="https://github.com/grvsnh/tickt/releases/latest/download"
 curl -fL -o /tmp/tickt-linux-x86_64.tar.gz \
-  https://github.com/grvsnh/tickt/releases/download/v1.0.0/tickt-linux-x86_64.tar.gz
+  "$release_url/tickt-linux-x86_64.tar.gz"
 curl -fL -o /tmp/tickt-linux-x86_64.tar.gz.sha256 \
-  https://github.com/grvsnh/tickt/releases/download/v1.0.0/tickt-linux-x86_64.tar.gz.sha256
+  "$release_url/tickt-linux-x86_64.tar.gz.sha256"
 (cd /tmp && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
 mkdir -p "$HOME/.local/bin"
 tar -xzf /tmp/tickt-linux-x86_64.tar.gz -C "$HOME/.local/bin"
