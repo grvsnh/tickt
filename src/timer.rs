@@ -461,4 +461,39 @@ mod tests {
         assert_eq!(timer.display(now).elapsed, Duration::from_secs(60));
         assert_eq!(timer.display(now + Duration::from_secs(20)).elapsed, Duration::from_secs(80));
     }
+
+    #[test]
+    fn long_break_is_scheduled_at_the_configured_focus_interval() {
+        let base = Instant::now();
+        let mut timer = engine();
+
+        for _ in 0..2 {
+            timer.start_focus(base, Utc::now()).expect("focus starts");
+            assert!(timer.tick(base + Duration::from_secs(60)).is_some());
+            timer.clear_completed();
+            if timer.completed_focus_sessions() == 1 {
+                assert_eq!(timer.suggested_break(), SessionType::ShortBreak);
+                timer
+                    .start_break(SessionType::ShortBreak, base, Utc::now())
+                    .expect("short break starts");
+                assert!(timer.tick(base + Duration::from_secs(60)).is_some());
+                assert_eq!(timer.completed_focus_sessions(), 1);
+                timer.clear_completed();
+            }
+        }
+
+        assert_eq!(timer.completed_focus_sessions(), 2);
+        assert_eq!(timer.suggested_break(), SessionType::LongBreak);
+    }
+
+    #[test]
+    fn invalid_transitions_are_rejected_without_mutating_idle_state() {
+        let base = Instant::now();
+        let mut timer = engine();
+        assert!(timer.pause(base).is_err());
+        assert!(timer.resume(base, Utc::now()).is_err());
+        assert!(timer.reset(base).is_err());
+        assert!(timer.skip(base).is_err());
+        assert_eq!(timer.status(), TimerStatus::Idle);
+    }
 }
