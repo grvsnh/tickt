@@ -222,12 +222,12 @@ never inserts fake completions or sample history.
 ## Release process
 
 Releases can be created automatically from the GitHub Actions UI by running the `Release`
-workflow and entering a semantic version such as `0.1.0`. The workflow creates and pushes the
-`v0.1.0` tag itself. The traditional command-line path also works:
+workflow and entering the next semantic version, currently `0.1.1`. The workflow creates and
+pushes the `v0.1.1` tag itself. The traditional command-line path also works:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 The workflow in `.github/workflows/release.yml` verifies the version against `Cargo.toml`, builds
