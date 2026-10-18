@@ -26,13 +26,13 @@ Linux binary, ten process launches per command on the development machine.
 
 | Command | Before | After |
 | --- | ---: | ---: |
-| `tickt stats` | 104.3 ms median | 37.1 ms median |
-| `tickt history --limit 50` | 2.2 ms median | 3.1 ms median |
+| `tickt stats` | 104.3 ms median | 44.8 ms median |
+| `tickt history --limit 50` | 2.2 ms median | 2.1 ms median |
 
 The history result is within normal process and filesystem variation; it was not the target of
-the optimization. The statistics path improved by about 64% for this large-history workload.
-The first post-change sample was a cold-cache outlier, so the table reports the median of ten
-runs rather than the best launch.
+the optimization. The statistics path improved by about 57% for this large-history workload.
+An earlier post-change run measured 37.1 ms; the final repeated run measured 44.8 ms. The table
+reports the final median of ten runs rather than the best launch.
 
 Reproduce a simple timing loop with Python's standard library:
 
