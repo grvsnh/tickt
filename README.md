@@ -45,11 +45,13 @@ There is no published release binary or package repository yet. Build from sourc
 pinned Rust toolchain:
 
 ```sh
-git clone <your-checkout-url>
-cd tickt
+cd /path/to/tickt
 cargo build --release --locked
 ./target/release/tickt --help
 ```
+
+The repository does not publish a clone URL yet; use the checkout supplied by your distribution
+or development workflow. The `rust-toolchain.toml` file pins the compiler used by Cargo.
 
 The source build needs a stable Rust toolchain (Rust 1.88.0), a C compiler, and `pkg-config`.
 SQLite is compiled through `rusqlite`'s bundled feature, so a system SQLite development package
