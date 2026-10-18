@@ -54,9 +54,8 @@ pub struct App {
 pub fn run(paths: AppPaths, config: AppConfig) -> Result<()> {
     config.validate()?;
     let storage = Storage::open(&paths.database_file)?;
-    let completed_focus = storage.count_completed_focus()?;
-    let timer = TimerEngine::new(config.timer.clone(), completed_focus)
-        .map_err(|error| anyhow::anyhow!(error))?;
+    let timer =
+        TimerEngine::new(config.timer.clone(), 0).map_err(|error| anyhow::anyhow!(error))?;
     let mut app = App::new(paths, config, storage, timer)?;
     app.prepare_recovery()?;
     let mut terminal = TerminalGuard::new()?;
@@ -89,6 +88,7 @@ impl App {
             should_quit: false,
         };
         app.refresh_data()?;
+        app.timer.set_completed_focus_sessions(app.stats.total_focus_sessions);
         Ok(app)
     }
 
@@ -378,8 +378,8 @@ impl App {
 
     fn refresh_data(&mut self) -> Result<()> {
         self.history = self.storage.recent_sessions(100)?;
-        let records = self.storage.records_since(0)?;
-        self.stats = Statistics::calculate(
+        let records = self.storage.completed_focus_since(0)?;
+        self.stats = Statistics::calculate_focus(
             &records,
             local_today(),
             u32::from(self.config.productivity.daily_goal_minutes),

@@ -5,6 +5,13 @@ use chrono::{DateTime, Days, Local, NaiveDate, Utc};
 use crate::model::{SessionRecord, SessionStatus};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FocusCompletion {
+    pub started_at: DateTime<Utc>,
+    pub planned_seconds: i64,
+    pub actual_seconds: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DayTotal {
     pub date: NaiveDate,
     pub minutes: u32,
@@ -26,14 +33,32 @@ pub struct Statistics {
 
 impl Statistics {
     pub fn calculate(records: &[SessionRecord], today: NaiveDate, daily_goal_minutes: u32) -> Self {
+        let completions = records
+            .iter()
+            .filter(|record| {
+                record.session_type.is_focus()
+                    && record.status == SessionStatus::Completed
+                    && record.actual_seconds >= record.planned_seconds
+            })
+            .map(|record| FocusCompletion {
+                started_at: record.started_at,
+                planned_seconds: record.planned_seconds,
+                actual_seconds: record.actual_seconds,
+            })
+            .collect::<Vec<_>>();
+        Self::calculate_focus(&completions, today, daily_goal_minutes)
+    }
+
+    pub fn calculate_focus(
+        records: &[FocusCompletion],
+        today: NaiveDate,
+        daily_goal_minutes: u32,
+    ) -> Self {
         let mut by_day = BTreeMap::<NaiveDate, (u32, u32)>::new();
         let mut total_sessions = 0_u32;
         let mut total_minutes = 0_u32;
         for record in records {
-            if !record.session_type.is_focus()
-                || record.status != SessionStatus::Completed
-                || record.actual_seconds < record.planned_seconds
-            {
+            if record.actual_seconds < record.planned_seconds {
                 continue;
             }
             let date = record.started_at.with_timezone(&Local).date_naive();

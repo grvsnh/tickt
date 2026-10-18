@@ -61,8 +61,8 @@ impl ConfigCommand {
 }
 
 pub fn print_stats(storage: &Storage, config: &AppConfig) -> Result<()> {
-    let records = storage.records_since(0)?;
-    let stats = Statistics::calculate(
+    let records = storage.completed_focus_since(0)?;
+    let stats = Statistics::calculate_focus(
         &records,
         local_today(),
         u32::from(config.productivity.daily_goal_minutes),

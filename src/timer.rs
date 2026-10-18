@@ -265,6 +265,10 @@ impl TimerEngine {
         self.completed_focus_sessions
     }
 
+    pub fn set_completed_focus_sessions(&mut self, count: u32) {
+        self.completed_focus_sessions = count;
+    }
+
     pub fn suggested_break(&self) -> SessionType {
         if self.completed_focus_sessions > 0
             && self.completed_focus_sessions % u32::from(self.config.long_break_interval) == 0

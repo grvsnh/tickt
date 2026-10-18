@@ -8,6 +8,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use crate::model::{
     ActiveSessionSnapshot, ActiveStatus, SessionRecord, SessionStatus, SessionType,
 };
+use crate::statistics::FocusCompletion;
 
 pub struct Storage {
     connection: Connection,
@@ -56,6 +57,21 @@ impl Storage {
         rows.collect::<rusqlite::Result<Vec<_>>>().context("could not read recent sessions")
     }
 
+    pub fn completed_focus_since(&self, timestamp: i64) -> Result<Vec<FocusCompletion>> {
+        let mut statement = self.connection.prepare(
+            "SELECT started_at, planned_seconds, actual_seconds
+             FROM sessions
+             WHERE started_at >= ?1
+               AND session_type = 'focus'
+               AND status = 'completed'
+               AND actual_seconds >= planned_seconds
+             ORDER BY started_at ASC",
+        )?;
+        let rows = statement.query_map([timestamp], decode_focus_completion)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .context("could not read completed focus sessions")
+    }
+
     pub fn records_since(&self, timestamp: i64) -> Result<Vec<SessionRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT id, session_type, started_at, ended_at, planned_seconds, actual_seconds, status
@@ -63,16 +79,6 @@ impl Storage {
         )?;
         let rows = statement.query_map([timestamp], decode_record)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().context("could not read statistics records")
-    }
-
-    pub fn count_completed_focus(&self) -> Result<u32> {
-        let count: i64 = self.connection.query_row(
-            "SELECT COUNT(*) FROM sessions
-             WHERE session_type = 'focus' AND status = 'completed' AND actual_seconds >= planned_seconds",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(count.max(0) as u32)
     }
 
     pub fn save_active(&self, snapshot: &ActiveSessionSnapshot) -> Result<()> {
@@ -127,6 +133,11 @@ fn migrate(connection: &Connection) -> Result<()> {
                 created_at INTEGER NOT NULL DEFAULT (unixepoch())
             );
             CREATE INDEX IF NOT EXISTS sessions_started_at_idx ON sessions (started_at DESC);
+            CREATE INDEX IF NOT EXISTS sessions_completed_focus_idx
+                ON sessions (started_at)
+                WHERE session_type = 'focus'
+                  AND status = 'completed'
+                  AND actual_seconds >= planned_seconds;
             CREATE TABLE IF NOT EXISTS active_timer (
                 slot INTEGER PRIMARY KEY CHECK (slot = 1),
                 session_id TEXT NOT NULL UNIQUE,
@@ -137,15 +148,33 @@ fn migrate(connection: &Connection) -> Result<()> {
                 elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds >= 0),
                 running_since INTEGER
              );
-             PRAGMA user_version = 2;",
+             PRAGMA user_version = 3;",
         )?;
         transaction.commit().context("could not commit initial schema")?;
     } else if version == 1 {
         let transaction = connection.unchecked_transaction()?;
         transaction.execute("ALTER TABLE active_timer ADD COLUMN running_since INTEGER", [])?;
-        transaction.execute_batch("PRAGMA user_version = 2;")?;
+        transaction.execute_batch(
+            "CREATE INDEX IF NOT EXISTS sessions_completed_focus_idx
+                ON sessions (started_at)
+                WHERE session_type = 'focus'
+                  AND status = 'completed'
+                  AND actual_seconds >= planned_seconds;
+             PRAGMA user_version = 3;",
+        )?;
         transaction.commit().context("could not migrate active timer schema")?;
-    } else if version != 2 {
+    } else if version == 2 {
+        let transaction = connection.unchecked_transaction()?;
+        transaction.execute_batch(
+            "CREATE INDEX IF NOT EXISTS sessions_completed_focus_idx
+                ON sessions (started_at)
+                WHERE session_type = 'focus'
+                  AND status = 'completed'
+                  AND actual_seconds >= planned_seconds;
+             PRAGMA user_version = 3;",
+        )?;
+        transaction.commit().context("could not migrate statistics index")?;
+    } else if version != 3 {
         bail!("unsupported database schema version {version}");
     }
     Ok(())
@@ -206,6 +235,14 @@ fn decode_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
         planned_seconds: row.get(4)?,
         actual_seconds: row.get(5)?,
         status: decode_status(&row.get::<_, String>(6)?)?,
+    })
+}
+
+fn decode_focus_completion(row: &rusqlite::Row<'_>) -> rusqlite::Result<FocusCompletion> {
+    Ok(FocusCompletion {
+        started_at: timestamp(row.get(0)?)?,
+        planned_seconds: row.get(1)?,
+        actual_seconds: row.get(2)?,
     })
 }
 
@@ -390,7 +427,7 @@ mod tests {
             since.iter().map(|record| record.id.as_str()).collect::<Vec<_>>(),
             ["middle", "new"]
         );
-        assert_eq!(storage.count_completed_focus().expect("count"), 1);
+        assert_eq!(storage.completed_focus_since(0).expect("count").len(), 1);
     }
 
     #[test]
@@ -455,7 +492,7 @@ mod tests {
             .connection_for_test()
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         let unknown = dir.path().join("unknown.db");
         let connection = Connection::open(&unknown).expect("open unknown");
