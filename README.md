@@ -143,6 +143,8 @@ python3 scripts/benchmark-large-history.py --rows 100000 --repeats 10
 cargo run --release --locked --example benchmark_storage
 ```
 
+The same commands are available as `make benchmark-history` and `make benchmark-writes`.
+
 The test suite covers timer transitions and recovery, configuration validation, statistics,
 streaks, SQLite migrations, ordering, and persistence. CI builds once and smoke-tests the same
 static archive on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky Linux, and Alpine.

@@ -1,4 +1,4 @@
-.PHONY: build check test fmt lint quality fetch release-metadata run release release-check
+.PHONY: build check test fmt lint quality fetch benchmark-history benchmark-writes release-metadata run release release-check
 
 build:
 	cargo build --locked
@@ -22,6 +22,12 @@ release-metadata:
 
 fetch:
 	cargo fetch --locked
+
+benchmark-history:
+	python3 scripts/benchmark-large-history.py --rows 100000 --repeats 10
+
+benchmark-writes:
+	cargo run --release --locked --example benchmark_storage
 
 run:
 	cargo run --locked
