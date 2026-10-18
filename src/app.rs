@@ -114,13 +114,28 @@ impl App {
     }
 
     fn event_loop(&mut self, terminal: &mut TerminalGuard) -> Result<()> {
+        let mut redraw = true;
+        let mut last_timer = None;
+        let mut last_clock_minute = None;
         while !self.should_quit {
             let now = Instant::now();
             if self.stats_date != local_today() {
                 self.refresh_statistics();
+                redraw = true;
             }
             if let Some(record) = self.timer.tick(now) {
                 self.complete_session(record)?;
+                redraw = true;
+            }
+            let visible_timer = self.visible_timer(now);
+            if last_timer != Some(visible_timer) {
+                last_timer = Some(visible_timer);
+                redraw = true;
+            }
+            let clock_minute = chrono::Local::now().timestamp() / 60;
+            if last_clock_minute != Some(clock_minute) {
+                last_clock_minute = Some(clock_minute);
+                redraw = true;
             }
             let timeout = if self.timer.status() == TimerStatus::Running {
                 Duration::from_millis(100)
@@ -129,17 +144,33 @@ impl App {
             };
             if event::poll(timeout).context("could not poll terminal events")? {
                 match event::read().context("could not read terminal event")? {
-                    Event::Key(key) => self.handle_key(key)?,
-                    Event::Resize(_, _) => {}
+                    Event::Key(key) => {
+                        self.handle_key(key)?;
+                        redraw = true;
+                    }
+                    Event::Resize(_, _) => redraw = true,
                     _ => {}
                 }
             }
-            terminal
-                .terminal
-                .draw(|frame| ui::draw(frame, self))
-                .context("could not render dashboard")?;
+            if redraw {
+                terminal
+                    .terminal
+                    .draw(|frame| ui::draw(frame, self))
+                    .context("could not render dashboard")?;
+                redraw = false;
+            }
         }
         Ok(())
+    }
+
+    fn visible_timer(&self, now: Instant) -> (SessionType, TimerStatus, u64, u16) {
+        let display = self.timer.display(now);
+        (
+            display.session_type,
+            display.status,
+            display.remaining.as_secs(),
+            display.progress_percent,
+        )
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
