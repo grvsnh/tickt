@@ -67,3 +67,32 @@ jobs:
       - name: Run noninteractive smoke command
         shell: bash
         run: ${{ matrix.binary }} --version
+
+  linux-distro-smoke:
+    name: Linux distribution smoke test (${{ matrix.distribution }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: Arch Linux
+            image: archlinux:latest
+          - distribution: Fedora
+            image: fedora:latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Build Linux binary
+        run: cargo build --release --locked
+
+      - name: Run binary in ${{ matrix.distribution }}
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/work:ro" \
+            --workdir /work \
+            "${{ matrix.image }}" \
+            /work/target/release/tickt --version

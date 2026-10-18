@@ -25,6 +25,16 @@ Test in GNOME Terminal, Konsole, or another xterm-compatible terminal:
 Start, pause, resume, skip, reset, resize the window, open history/statistics/help, quit, and
 relaunch. Confirm that the shell is not left in raw mode.
 
+The release workflow also runs the Linux binary in current Arch Linux and Fedora containers. This
+checks that the Ubuntu-runner-built glibc binary is not tied to Ubuntu-specific runtime files. If
+Docker is available locally, run the same smoke test with:
+
+```sh
+cargo build --release --locked
+docker run --rm -v "$PWD:/work:ro" -w /work archlinux:latest /work/target/release/tickt --version
+docker run --rm -v "$PWD:/work:ro" -w /work fedora:latest /work/target/release/tickt --version
+```
+
 ## macOS
 
 Test in macOS Terminal and iTerm2:

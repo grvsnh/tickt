@@ -79,7 +79,9 @@ For a local checkout, `cargo run --locked` launches Tickt immediately with defau
 ### Release binaries
 
 Tagged GitHub releases provide archives for Linux x86_64, macOS Intel, macOS Apple Silicon, and
-Windows x86_64. Download the archive for your platform from
+Windows x86_64. The Linux binary is a glibc Linux executable, not an Ubuntu-only package: it is
+intended to run on Ubuntu, Debian, Arch Linux, Fedora, and other current x86_64 glibc
+distributions. Download the archive for your platform from
 <https://github.com/grvsnh/tickt/releases>, extract it, and run `tickt --help`.
 
 On Linux or macOS, you can put the binary on your PATH:
@@ -93,6 +95,21 @@ tickt --version
 
 On Windows, extract `tickt-windows-x86_64.zip`, then add the extracted directory to your user
 `PATH`. The release page includes a SHA-256 file for every archive.
+
+Arch Linux and Fedora users do not need an AUR package, COPR repository, or npm. The release
+archive is the installation format:
+
+```sh
+# Arch or Fedora, after downloading the Linux archive
+tar -xzf tickt-linux-x86_64.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 0755 tickt "$HOME/.local/bin/tickt"
+tickt --version
+```
+
+For source builds, Arch needs `base-devel` and the pinned Rust toolchain; Fedora needs a C/C++
+toolchain, `make`, `pkg-config`, and the pinned Rust toolchain. The bundled SQLite build means a
+system SQLite development package is not required.
 
 ## CLI
 
