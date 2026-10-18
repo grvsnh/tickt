@@ -15,7 +15,7 @@ Highlights
 
 Performance
 
-On the development machine, `tickt stats` over 100,000 synthetic sessions measured 44.8 ms
+On the development machine, `tickt stats` over 100,000 synthetic sessions measured 42.6 ms
 median in the final v1.1 benchmark run, compared with 104.3 ms before the completed-focus query
 optimization. Results vary by filesystem, CPU, and cache state; the benchmark scripts are included
 so users and maintainers can reproduce them.
