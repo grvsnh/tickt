@@ -150,6 +150,9 @@ static archive on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky Linux, and Alpin
 - `src/ui/` — Ratatui terminal views.
 - `scripts/package-linux.sh` — reproducible static release packaging.
 
+See [docs/performance.md](docs/performance.md) for the measured statistics optimization and
+future profiling targets.
+
 Tickt is intentionally Linux-terminal-only for v1.0. There is no native desktop app or web app.
 
 ## OmniRush idea
