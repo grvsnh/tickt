@@ -52,11 +52,47 @@ print(f"median_ms={statistics.median(samples):.3f}")
 PY
 ```
 
+## v1.1 development benchmarks
+
+The large-history fixture is reproducible without extra Python packages:
+
+```sh
+cargo build --release --locked --target x86_64-unknown-linux-musl
+python3 scripts/benchmark-large-history.py --rows 100000 --repeats 10
+python3 scripts/benchmark-large-history.py --rows 1000000 --repeats 10
+```
+
+It reports median and p95 timings for `stats` and bounded history, and prints the SQLite query
+plan so an index regression is visible. It uses a temporary database and never touches user data.
+
+SQLite write latency can be measured with:
+
+```sh
+cargo run --release --locked --example benchmark_storage
+```
+
+The benchmark measures complete file-backed operations, including transaction commit. A local
+run on the development machine reported these p50 values:
+
+| Operation | p50 |
+| --- | ---: |
+| `save_active` | 6.25 ms |
+| `finish_session` | 6.81 ms |
+| duplicate completion | 0.09 ms |
+| `clear_active` | 6.32 ms |
+
+These are a baseline, not a universal target. The benchmark uses temporary storage and SQLite's
+default durability settings; changing those settings would trade crash durability for latency.
+
 ## What remains intentionally simple
 
 - The event loop remains synchronous; notification delivery is best-effort and non-blocking.
 - History display is bounded to recent rows.
 - The release profile uses thin LTO to balance runtime performance with build time.
+- The interactive statistics accumulator avoids re-reading historical rows after each successful
+  completion, while startup still loads the source-of-truth history once.
+- The TUI polls frequently enough for timer completion but skips draws when the visible state has
+  not changed.
 - A statistics cache or background worker is not justified until real users show larger databases
   or noticeable post-session latency.
 

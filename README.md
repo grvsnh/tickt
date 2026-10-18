@@ -136,6 +136,13 @@ make lint
 make release
 ```
 
+Development benchmarks stay separate from the correctness gate:
+
+```sh
+python3 scripts/benchmark-large-history.py --rows 100000 --repeats 10
+cargo run --release --locked --example benchmark_storage
+```
+
 The test suite covers timer transitions and recovery, configuration validation, statistics,
 streaks, SQLite migrations, ordering, and persistence. CI builds once and smoke-tests the same
 static archive on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky Linux, and Alpine.
@@ -150,8 +157,8 @@ static archive on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky Linux, and Alpin
 - `src/ui/` — Ratatui terminal views.
 - `scripts/package-linux.sh` — reproducible static release packaging.
 
-See [docs/performance.md](docs/performance.md) for the measured statistics optimization and
-future profiling targets.
+See [docs/performance.md](docs/performance.md) for the measured statistics optimization, v1.1
+benchmarks, and future profiling targets.
 
 Tickt is intentionally Linux-terminal-only for v1.0. There is no native desktop app or web app.
 
