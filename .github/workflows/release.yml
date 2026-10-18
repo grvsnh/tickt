@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
           release_tag="v$version"
-          release_notes="release-notes/$version.txt"
+          release_notes="release-notes/v$version.txt"
           test -f "$release_notes"
           current_commit="$(git rev-parse HEAD)"
 
