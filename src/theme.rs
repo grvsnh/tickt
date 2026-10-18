@@ -54,9 +54,28 @@ impl Theme {
         }
     }
 
+    pub const fn terminal_default() -> Self {
+        Self {
+            background: Color::Reset,
+            surface: Color::Reset,
+            panel: Color::Reset,
+            primary: Color::Reset,
+            secondary: Color::DarkGray,
+            accent: Color::Green,
+            success: Color::Green,
+            warning: Color::Yellow,
+            error: Color::Red,
+            border: Color::DarkGray,
+            muted: Color::DarkGray,
+            focus: Color::Green,
+            break_color: Color::Cyan,
+        }
+    }
+
     pub fn from_name(name: &str) -> Self {
         match name {
             "light" => Self::light(),
+            "default" => Self::terminal_default(),
             _ => Self::dark(),
         }
     }

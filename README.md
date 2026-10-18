@@ -140,6 +140,9 @@ theme = "dark" # dark, light, default
 unicode = true # set false for ASCII-friendly progress bars
 ```
 
+`theme = "default"` uses terminal-default colors, while `dark` and `light` use Tickt's curated
+palettes. Set `unicode = false` when a terminal or font is not comfortable with block glyphs.
+
 Durations are validated on startup. Focus and long-break durations may be 1–240 minutes;
 short breaks may be 1–120 minutes; goals may be 1–1440 minutes. Unknown TOML fields are
 rejected with a parse error instead of being silently ignored.
