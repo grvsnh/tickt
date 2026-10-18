@@ -1,4 +1,4 @@
-.PHONY: build check test fmt lint quality fetch run release release-check
+.PHONY: build check test fmt lint quality fetch release-metadata run release release-check
 
 build:
 	cargo build --locked
@@ -16,6 +16,9 @@ lint:
 	cargo clippy --locked --all-targets -- -D warnings
 
 quality: fmt check test lint
+
+release-metadata:
+	./scripts/check-release-metadata.sh
 
 fetch:
 	cargo fetch --locked

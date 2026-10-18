@@ -52,6 +52,9 @@ jobs:
       - name: Install static Linux linker
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y musl-tools
 
+      - name: Check release metadata
+        run: ./scripts/check-release-metadata.sh
+
       - name: Run release quality gate
         run: |
           cargo fmt --all -- --check
