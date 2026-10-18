@@ -123,8 +123,8 @@ git push origin main
 ```
 
 The current release version is `1.0.0`. Do not push another `main` commit without changing the
-version after a release tag already exists; the workflow will stop instead of overwriting a
-release.
+version after a release tag already exists; the workflow will safely finish as a no-op instead of
+overwriting a release.
 
 ## Testing
 
