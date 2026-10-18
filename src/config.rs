@@ -227,11 +227,64 @@ mod tests {
     }
 
     #[test]
+    fn validation_covers_all_public_enum_and_range_fields() {
+        let mut config = AppConfig::default();
+        config.timer.focus_minutes = 241;
+        assert!(config.validate().is_err());
+
+        let mut config = AppConfig::default();
+        config.timer.short_break_minutes = 121;
+        assert!(config.validate().is_err());
+
+        let mut config = AppConfig::default();
+        config.timer.long_break_minutes = 241;
+        assert!(config.validate().is_err());
+
+        let mut config = AppConfig::default();
+        config.timer.long_break_interval = 13;
+        assert!(config.validate().is_err());
+
+        let mut config = AppConfig::default();
+        config.productivity.daily_goal_minutes = 0;
+        assert!(config.validate().is_err());
+
+        let mut config = AppConfig::default();
+        config.ui.theme = "neon".to_owned();
+        assert!(config.validate().is_err());
+
+        let mut config = AppConfig::default();
+        config.recovery.on_startup = "always".to_owned();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn partial_config_keeps_nested_defaults_and_example_is_valid() {
+        let partial: AppConfig =
+            toml::from_str("[timer]\nfocus_minutes = 30").expect("partial config");
+        assert_eq!(partial.timer.focus_minutes, 30);
+        assert_eq!(partial.timer.short_break_minutes, 5);
+        assert_eq!(partial.productivity.daily_goal_minutes, 100);
+
+        let example: AppConfig =
+            toml::from_str(include_str!("../examples/config.toml")).expect("example config parses");
+        assert!(example.validate().is_ok());
+    }
+
+    #[test]
     fn init_never_overwrites_existing_config() {
         let root = tempdir().expect("tempdir");
         let paths = AppPaths::for_test(root.path());
         assert!(AppConfig::init(&paths).expect("init"));
         assert!(!AppConfig::init(&paths).expect("second init"));
         assert!(paths.config_file.exists());
+    }
+
+    #[test]
+    fn load_reports_invalid_existing_config() {
+        let root = tempdir().expect("tempdir");
+        let paths = AppPaths::for_test(root.path());
+        fs::create_dir_all(&paths.config_dir).expect("config directory");
+        fs::write(&paths.config_file, "[ui]\ntheme = 'unknown'").expect("config file");
+        assert!(AppConfig::load_or_default(&paths).is_err());
     }
 }
