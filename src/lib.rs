@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "linux"))]
+compile_error!("Tickt v1.0 supports Linux terminal environments only.");
+
 pub mod app;
 pub mod cli;
 pub mod config;

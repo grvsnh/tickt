@@ -2,353 +2,161 @@
 
 **Make time count.**
 
-Tickt is a local-first Pomodoro focus dashboard for developers who already live in a terminal.
-It provides a reliable keyboard-driven timer, persistent session history, and honest daily
-statistics without an account, a daemon, cloud sync, or network access during normal use.
+Tickt is a fast, local-first Pomodoro dashboard for Linux terminals. It is keyboard-driven,
+works offline, stores history in SQLite, and has no account, daemon, telemetry, or web UI.
 
-## Why Tickt?
+## Install a release
 
-- **A timer you can trust:** elapsed time comes from a monotonic clock, so redraw delays do not
-  make sessions drift.
-- **Useful, not decorative:** completed focus time, daily goals, streaks, and recent activity
-  come from a local SQLite database.
-- **Recoverable by design:** active sessions are persisted. A restart offers recovery, and a
-  timer that expired while Tickt was closed is conservatively recorded as interrupted.
-- **Terminal-native:** Ratatui and Crossterm provide a responsive interface with no mouse or
-  patched font required.
-- **Local and private:** data stays under XDG directories. There is no telemetry or required
-  service.
-- **Graceful integrations:** desktop notifications use `notify-send` when available; the timer
-  continues normally when notification services or sound support are missing.
+The release is one statically linked x86_64 Linux binary. It is tested on Ubuntu, Debian, Arch,
+Fedora, openSUSE, Rocky Linux, and Alpine. Download the latest archive from:
 
-## What it looks like
+<https://github.com/grvsnh/tickt/releases>
 
-```text
- ┌ TICKT   Make time count                         Sat 18 Oct  17:40 ┐
- │ FOCUS  ● RUNNING                                                    │
- │                           24:37                                    │
- │                    ████████████░░░░░░░░░░  3%                     │
- │                 Space pause · s skip · r reset                     │
- ├─────────────────────────────────┬──────────────────────────────────┤
- │ RECENT ACTIVITY                 │ TODAY'S FOCUS                    │
- │ focus       25m  completed  17:05│  2 completed sessions            │
- │ short break  5m  completed  16:40│  50 / 100 min (50%)             │
- │                                 │  2 day streak                    │
- └─────────────────────────────────┴──────────────────────────────────┘
+```sh
+curl -fL -o /tmp/tickt-linux-x86_64.tar.gz \
+  https://github.com/grvsnh/tickt/releases/download/v1.0.0/tickt-linux-x86_64.tar.gz
+curl -fL -o /tmp/tickt-linux-x86_64.tar.gz.sha256 \
+  https://github.com/grvsnh/tickt/releases/download/v1.0.0/tickt-linux-x86_64.tar.gz.sha256
+(cd /tmp && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
+mkdir -p "$HOME/.local/bin"
+tar -xzf /tmp/tickt-linux-x86_64.tar.gz -C "$HOME/.local/bin"
+tickt --version
+tickt
 ```
 
-This is a representative layout, not a screenshot and not seeded application data.
+## Build from source
 
-## Installation
+Rust 1.88.0, a C compiler, and a Linux terminal are required. SQLite is bundled. For the
+portable static release build, install the musl linker and target too.
 
-Build from source with the pinned Rust toolchain:
+Debian/Ubuntu:
+
+```sh
+sudo apt install build-essential musl-tools
+rustup target add x86_64-unknown-linux-musl
+```
+
+Arch:
+
+```sh
+sudo pacman -S --needed base-devel musl rustup
+rustup target add x86_64-unknown-linux-musl
+```
+
+Fedora:
+
+```sh
+sudo dnf install gcc gcc-c++ make musl-gcc
+rustup target add x86_64-unknown-linux-musl
+```
+
+Build and run the application:
 
 ```sh
 git clone https://github.com/grvsnh/tickt.git
 cd tickt
-cargo build --release --locked
-./target/release/tickt --help
+cargo run --locked
 ```
 
-The `rust-toolchain.toml` file pins the compiler used by Cargo. If you already have a checkout,
-run the build commands from its root.
-
-The source build needs a stable Rust toolchain (Rust 1.88.0) and a C compiler.
-SQLite is compiled through `rusqlite`'s bundled feature, so a system SQLite development package
-is not required. The included `Dockerfile` installs the build prerequisites and produces the
-release binary in a Linux container.
-
-To build and run the container image with persistent local data:
+Create the exact release archive locally:
 
 ```sh
-docker build -t tickt:local .
-docker run --rm -it \
-  -e XDG_CONFIG_HOME=/root/.config \
-  -e XDG_DATA_HOME=/root/.local/share \
-  -v "$HOME/.config/tickt:/root/.config/tickt" \
-  -v "$HOME/.local/share/tickt:/root/.local/share/tickt" \
-  tickt:local
-```
-
-The container command is interactive and does not provide desktop notifications from the host;
-the terminal timer and SQLite history still work. Docker is an optional reproducible build path,
-not a required runtime dependency.
-
-For a local checkout, `cargo run --locked` launches Tickt immediately with default settings.
-
-To create exactly the same portable Linux archive and checksum that the release workflow
-publishes:
-
-```sh
-# Debian/Ubuntu build host:
-sudo apt install musl-tools
-rustup target add x86_64-unknown-linux-musl
-
 ./scripts/package-linux.sh 1.0.0
-# or: make release
 sha256sum -c dist/release/tickt-linux-x86_64.tar.gz.sha256
-mkdir -p /tmp/tickt-v1
-tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C /tmp/tickt-v1
-/tmp/tickt-v1/tickt --version
 ```
 
-### Release binaries
-
-Tagged GitHub releases provide one statically linked Linux x86_64 archive. It is not an
-Ubuntu-only package: the same binary is tested on Ubuntu, Debian, Arch Linux, Fedora, openSUSE,
-Rocky Linux, and Alpine. Download the archive from
-<https://github.com/grvsnh/tickt/releases>, extract it, and run `tickt --help`.
-
-On Linux, put the binary on your PATH:
-
-```sh
-tar -xzf tickt-linux-x86_64.tar.gz
-mkdir -p "$HOME/.local/bin"
-install -m 0755 tickt "$HOME/.local/bin/tickt"
-tickt --version
-```
-
-Linux users do not need an AUR package, COPR repository, distro-specific package, or npm. The
-release archive is the installation format:
-
-```sh
-# Any supported Linux distribution, after downloading the Linux archive
-tar -xzf tickt-linux-x86_64.tar.gz
-mkdir -p "$HOME/.local/bin"
-install -m 0755 tickt "$HOME/.local/bin/tickt"
-tickt --version
-```
-
-For source builds, Arch needs `base-devel`, Fedora needs a C/C++ toolchain and `make`, and Debian
-or Ubuntu needs `build-essential`. The bundled SQLite build means a system SQLite development
-package and `pkg-config` are not required. Creating the portable release locally additionally
-needs `musl-tools` and the Rust target `x86_64-unknown-linux-musl`.
-
-### Windows through WSL2
-
-There is no native Windows `.exe` release yet. Windows users can run the Linux release through
-WSL2 and Windows Terminal:
-
-```powershell
-wsl --install -d Ubuntu
-```
-
-Restart Windows if prompted, open the Ubuntu app or Windows Terminal with an Ubuntu profile, then
-run the Linux installation commands from inside WSL. For example:
-
-```sh
-sudo apt update
-sudo apt install -y ca-certificates curl tar
-mkdir -p "$HOME/.local/bin"
-curl -fL -o /tmp/tickt.tar.gz \
-  https://github.com/grvsnh/tickt/releases/download/v1.0.0/tickt-linux-x86_64.tar.gz
-tar -xzf /tmp/tickt.tar.gz -C "$HOME/.local/bin"
-tickt --version
-```
-
-WSL is treated as Linux: configuration and history stay inside the WSL home directory under the
-XDG paths. Desktop notifications are optional and depend on the WSL environment. The release
-binary is static, so it does not depend on Ubuntu-specific shared libraries.
-
-## CLI
-
-```text
-tickt                 Launch the interactive dashboard
-tickt --help          Show command help
-tickt --version       Show the version
-tickt config path     Print the resolved TOML path
-tickt config init     Create a sample config safely
-tickt stats           Print today's summary
-tickt history         Print recent sessions
-```
-
-Noninteractive commands do not enter raw mode or the alternate screen and are safe to pipe.
-
-## Keyboard shortcuts
+## Controls
 
 | Key | Action |
 | --- | --- |
-| `Space` | Start, pause, or resume the current session |
+| `Space` | Start, pause, or resume |
 | `n` | Start the suggested next session |
-| `b` / `l` | Start a short / long break while idle |
+| `b` / `l` | Start a short / long break |
 | `r` / `s` | Confirm before reset / skip |
 | `h` | History |
 | `t` | Statistics |
 | `,` | Settings |
 | `?` | Help |
-| `Esc` / `d` | Return to the dashboard |
+| `Esc` / `d` | Dashboard |
 | `q` | Confirm and quit |
-
-See [docs/keybindings.md](docs/keybindings.md) for modal and recovery behavior.
 
 ## Configuration and data
 
-On Linux, Tickt follows the XDG Base Directory Specification:
+Tickt follows the Linux XDG directories:
 
-| Purpose | Default path |
-| --- | --- |
-| Configuration | `~/.config/tickt/config.toml` |
-| SQLite history and recovery state | `~/.local/share/tickt/tickt.db` |
-| Reserved log state path | `~/.local/state/tickt/tickt.log` |
+```text
+~/.config/tickt/config.toml
+~/.local/share/tickt/tickt.db
+~/.local/state/tickt/tickt.log
+```
 
-`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME` override these roots when they are
-absolute paths. On macOS and Windows, Tickt uses the platform-native application data directory
-provided by the `directories` crate. Print the active configuration path with:
+Use custom absolute XDG roots with `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME`.
 
 ```sh
 tickt config path
 ```
 
-`config init` never overwrites an existing file. A complete, valid example is in
-[examples/config.toml](examples/config.toml). The main options are:
+The complete configuration example is in `examples/config.toml`. Defaults are 25-minute focus,
+5-minute short break, 15-minute long break, and a 100-minute daily goal. Only fully completed
+focus sessions count toward statistics; skipped, reset, interrupted, partial, and break sessions
+do not count.
 
-```toml
-[timer]
-focus_minutes = 25
-short_break_minutes = 5
-long_break_minutes = 15
-long_break_interval = 4
+An active timer is saved locally. A paused timer stays paused after restart. A timer that expired
+while Tickt was closed is recorded as interrupted rather than fabricated as completed work.
 
-[productivity]
-daily_goal_minutes = 100
+## Release automation
 
-[ui]
-theme = "dark" # dark, light, default
-unicode = true # set false for ASCII-friendly progress bars
-```
+The GitHub workflow at `.github/workflows/release.yml` creates the release automatically when
+`main` is pushed:
 
-`theme = "default"` uses terminal-default colors, while `dark` and `light` use Tickt's curated
-palettes. Set `unicode = false` when a terminal or font is not comfortable with block glyphs.
+1. It reads the version from `Cargo.toml`.
+2. It creates and pushes the matching `v<version>` tag.
+3. It builds the static Linux binary.
+4. It verifies the archive across representative Linux distributions.
+5. It publishes the GitHub release and checksum.
 
-Durations are validated on startup. Focus and long-break durations may be 1–240 minutes;
-short breaks may be 1–120 minutes; goals may be 1–1440 minutes. Unknown TOML fields are
-rejected with a parse error instead of being silently ignored.
-
-## Timer and statistics rules
-
-The default cycle is 25 minutes of focus, a five-minute short break, and a 15-minute long break
-after every four completed focus sessions. A focus session counts only when it reaches its full
-planned duration. Skipped, reset, partial, interrupted, and break sessions never count as focus
-work.
-
-Dates use the local calendar day for display and grouping. The current streak is a consecutive
-run of days that met the daily goal; before today's goal is reached, the streak is measured
-backward from yesterday. The database stores UTC epoch timestamps so local presentation remains
-unambiguous across restarts and daylight-saving changes.
-
-When Tickt starts, a saved paused timer stays paused. A saved running timer is reconciled against
-its UTC start timestamp. If its deadline passed while the process was closed, Tickt does not
-pretend that it observed the work: the recovery prompt records it as interrupted. Monotonic
-continuity cannot be preserved across a process restart, which is why this conservative policy
-exists.
-
-## Notifications and sound
-
-Notifications are best effort. When enabled, Tickt safely starts `notify-send` with fixed
-arguments after a session completes; it never invokes a shell and never blocks the event loop.
-Install a desktop notification provider and `notify-send` if you want desktop alerts. If the
-command or service is absent, the timer continues and Tickt displays a small status message.
-
-The optional sound setting emits the terminal bell. It is disabled by default and does not
-require an audio player or a particular sound server.
-
-## Testing and development
-
-The repository includes a pinned lockfile, Makefile targets, and an offline test command after
-dependencies have been fetched once:
+For a new release, update the version in `Cargo.toml`, run the checks, and push `main`:
 
 ```sh
-cargo fmt --all -- --check
-cargo check --locked
-cargo test --locked --offline
-cargo clippy --locked --all-targets -- -D warnings
+git push origin main
 ```
 
-Equivalent shortcuts are available as `make fmt`, `make check`, `make test`, and `make lint`.
-The deterministic unit tests cover timer transitions and recovery, configuration validation,
-statistics/streak rules, SQLite migrations, session ordering, and active-state persistence.
+The current release version is `1.0.0`. Do not push another `main` commit without changing the
+version after a release tag already exists; the workflow will stop instead of overwriting a
+release.
 
-## Fast demo
-
-Use the one-minute development configuration from [docs/demo.md](docs/demo.md), then launch
-with temporary XDG directories. Start, pause, resume, complete a session, inspect history and
-statistics, quit, and relaunch. The normal default configuration remains 25 minutes; Tickt
-never inserts fake completions or sample history.
-
-## Release process
-
-Releases can be created automatically from the GitHub Actions UI by running the `Release`
-workflow and entering `1.0.0`. The workflow creates and pushes the `v1.0.0` tag itself, then
-builds the archive and publishes the release in the same workflow run. The traditional
-command-line path also works:
+## Testing
 
 ```sh
-git tag v1.0.0
-git push origin v1.0.0
+make fmt
+make check
+make test
+make lint
+make release
 ```
 
-The workflow in `.github/workflows/release.yml` verifies the version against `Cargo.toml`, builds
-one optimized static Linux x86_64 archive, checks the extracted binary across representative
-Linux distributions, generates a SHA-256 file, and publishes it to the GitHub release. No npm
-account or token is required. The first v1.0 release has not been published from this checkout
-yet.
+The test suite covers timer transitions and recovery, configuration validation, statistics,
+streaks, SQLite migrations, ordering, and persistence. CI builds once and smoke-tests the same
+static archive on Ubuntu, Debian, Arch, Fedora, openSUSE, Rocky Linux, and Alpine.
 
-The release is intentionally one job: tag creation, Rust installation, build, archive verification,
-distro smoke tests, and GitHub publishing all happen in the same run. This avoids a skipped
-dependent build when a manual workflow creates a tag. A direct tag push also starts the same path.
+## Architecture
 
-## OmniRush integration idea
+- `src/timer.rs` — monotonic timer state machine.
+- `src/statistics.rs` — deterministic goals, streaks, and daily totals.
+- `src/storage/` — SQLite schema, migration, and transactions.
+- `src/config.rs` — Linux XDG paths and TOML validation.
+- `src/app.rs` — event loop and application state.
+- `src/ui/` — Ratatui terminal views.
+- `scripts/package-linux.sh` — reproducible static release packaging.
 
-Tickt is currently a standalone terminal focus tool. A future OmniRush feature could provide an
-inbuilt CLI-based focus mode inside OmniRush itself: a user could launch a focused terminal
-workspace, see the active task and timer together, and receive local session summaries without
-opening another application. This is intentionally only a product idea for the OmniRush
-developers, not an implemented integration, plugin, or dependency. Tickt currently makes no
-OmniRush calls and does not require an OmniRush installation.
+Tickt is intentionally Linux-terminal-only for v1.0. There is no native desktop app or web app.
 
-## Project architecture
+## OmniRush idea
 
-The domain is intentionally small and synchronous:
+Tickt is independent today. A future OmniRush feature could provide an inbuilt terminal focus
+mode that combines the active OmniRush task, a Pomodoro timer, and local summaries. This is only
+an idea for OmniRush developers; Tickt makes no OmniRush calls and requires no OmniRush install.
 
-- `src/timer.rs` — monotonic timer state machine and restart recovery.
-- `src/statistics.rs` — pure daily aggregation, goals, streaks, and seven-day summaries.
-- `src/storage/` — SQLite schema, migration, parameterized queries, and transactions.
-- `src/config.rs` — typed TOML config, XDG paths, defaults, and validation.
-- `src/app.rs` — event loop, keyboard actions, persistence coordination, and recovery prompts.
-- `src/ui/` — Ratatui layout and all views.
-- `src/terminal.rs` — raw mode, alternate screen, cursor cleanup, and error-safe lifecycle.
+## License
 
-See [docs/architecture.md](docs/architecture.md) for the state and persistence boundaries.
-See [docs/platform-testing.md](docs/platform-testing.md) for release-platform smoke tests and
-the manual terminal checklist.
-
-## Troubleshooting
-
-- **Invalid TOML or value:** run `tickt config path`, open the reported file, and check the
-  field-specific validation message. Copy the known-good example if necessary.
-- **Notification unavailable:** install `notify-send` and a desktop notification service, or
-  disable `[notifications].enabled`; this does not affect timer accuracy.
-- **Terminal looks stuck after an interruption:** Tickt restores raw mode on normal errors and
-  panic unwinding. If a terminal emulator still needs resetting, run `stty sane`.
-- **Database cannot be opened:** verify the parent XDG data directory is writable. Tickt never
-  replaces a database when opening or migrating it fails.
-- **Small terminal:** resize to at least 64×18 for the complete dashboard. Smaller sizes show a
-  readable compact timer and quit hint.
-
-## Current limitations
-
-- Release artifacts target Linux x86_64 distributions through a static musl-linked binary.
-  Windows users should use WSL2 until a native Windows build is added.
-- There is no published v1.0 release artifact from this checkout yet, and no package-manager
-  formula, sync service, or remote API.
-- Interactive behavior is implemented with Crossterm, while CI smoke-tests the noninteractive
-  CLI on the Linux release binary across representative distro containers.
-- Perfect monotonic continuity is impossible across a process restart; recovery uses wall-clock
-  timestamps and intentionally avoids fabricating completed work.
-- Visual verification requires a real terminal. Automated tests cover the domain and persistence
-  but do not replace manual resize and terminal-cleanup checks.
-
-## Contributing and license
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development boundaries and migration conventions.
-Tickt is released under the [MIT License](LICENSE).
+MIT. See [LICENSE](LICENSE).

@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
 use crate::error::TicktError;
@@ -19,15 +18,13 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn resolve() -> Result<Self> {
-        let base = BaseDirs::new().context("could not determine the home directory")?;
-        let config_root = xdg_path("XDG_CONFIG_HOME", base.config_dir());
-        let data_root = xdg_path("XDG_DATA_HOME", base.data_dir());
-        let state_fallback = if cfg!(target_os = "linux") {
-            base.home_dir().join(".local").join("state")
-        } else {
-            base.data_dir().to_path_buf()
-        };
-        let state_root = xdg_path("XDG_STATE_HOME", &state_fallback);
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .context("HOME must be set to an absolute Linux home directory")?;
+        let config_root = xdg_path("XDG_CONFIG_HOME", &home.join(".config"));
+        let data_root = xdg_path("XDG_DATA_HOME", &home.join(".local").join("share"));
+        let state_root = xdg_path("XDG_STATE_HOME", &home.join(".local").join("state"));
         let config_dir = config_root.join("tickt");
         let data_dir = data_root.join("tickt");
         let state_dir = state_root.join("tickt");

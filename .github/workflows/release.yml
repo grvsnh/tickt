@@ -2,14 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Semantic version to release, without the v prefix"
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -19,45 +13,36 @@ jobs:
     name: Build and publish Linux release
     runs-on: ubuntu-22.04
     steps:
-      - name: Check out source
+      - name: Check out main
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Resolve and create release tag
+      - name: Resolve version and push release tag
         id: resolve
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_VERSION: ${{ inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            version="$INPUT_VERSION"
-            release_tag="v$version"
-            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-              echo "version must be a semantic version such as 1.0.0" >&2
+          version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
+          release_tag="v$version"
+          current_commit="$(git rev-parse HEAD)"
+
+          if git rev-parse --verify --quiet "refs/tags/$release_tag"; then
+            tagged_commit="$(git rev-list -n 1 "refs/tags/$release_tag")"
+            if [[ "$tagged_commit" != "$current_commit" ]]; then
+              echo "$release_tag already points to another commit; bump Cargo.toml before pushing main" >&2
               exit 1
             fi
-            cargo_version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
-            test "$version" = "$cargo_version"
-            current_commit="$(git rev-parse HEAD)"
-            if git rev-parse --verify --quiet "refs/tags/$release_tag"; then
-              tagged_commit="$(git rev-list -n 1 "refs/tags/$release_tag")"
-              test "$tagged_commit" = "$current_commit"
-            else
-              git config user.name "github-actions[bot]"
-              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-              git tag -a "$release_tag" -m "Release $release_tag"
-              git push origin "$release_tag"
-            fi
           else
-            release_tag="$REF_NAME"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$release_tag" -m "Release $release_tag"
+            git push origin "$release_tag"
           fi
+
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
-      - name: Install Rust and musl toolchain
+      - name: Install Rust and musl target
         uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: x86_64-unknown-linux-musl
@@ -65,26 +50,18 @@ jobs:
       - name: Install static Linux linker
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y musl-tools
 
-      - name: Confirm Cargo version matches tag
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
-          test "$version" = "$cargo_version"
-
-      - name: Build and package portable Linux release
+      - name: Build and package static Linux binary
         run: ./scripts/package-linux.sh "${RELEASE_TAG#v}"
 
-      - name: Verify release checksum and extract archive
+      - name: Verify checksum and extracted binary
         run: |
           set -euo pipefail
           (cd dist/release && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
           mkdir extracted
           tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C extracted
-          file extracted/tickt
           extracted/tickt --version
 
-      - name: Smoke-test representative Linux distributions
+      - name: Smoke-test Linux distributions
         run: |
           set -euo pipefail
           for image in \

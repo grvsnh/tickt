@@ -1,56 +1,48 @@
-# Release platform testing
+# Linux release testing
 
-Tickt v1.0 is a Linux-first release. The release workflow builds one optimized, statically linked
-`x86_64-unknown-linux-musl` binary and checks the extracted archive across representative Linux
-distributions. This covers distro families without compiling the same Rust application repeatedly.
+Tickt v1.0 ships one static x86_64 Linux archive. The release workflow builds it once and runs
+the extracted binary in representative containers:
 
-The release artifact is intended for x86_64 Linux distributions, including Ubuntu, Debian, Arch
-Linux, Fedora, openSUSE, Rocky Linux, and Alpine. It does not provide a native Windows `.exe`.
+- Ubuntu 22.04 and 24.04
+- Debian Bullseye and Bookworm
+- Arch Linux
+- Fedora
+- openSUSE Leap
+- Rocky Linux
+- Alpine
 
-## Linux terminals
+This is distro compatibility testing, not a separate package for each distribution. The binary
+is Linux terminal software and the release target is `x86_64-unknown-linux-musl`.
 
-Test in GNOME Terminal, Konsole, Alacritty, Foot, or another xterm-compatible terminal:
+## Local release test
 
-```sh
-./tickt --version
-./tickt --help
-./tickt
-```
-
-Start, pause, resume, skip, reset, resize the window, open history/statistics/help, quit, and
-relaunch. Confirm that the shell is not left in raw mode.
-
-## Linux distribution compatibility
-
-CI builds the release binary once on Ubuntu 22.04, extracts the archive, then runs that same
-static binary in Ubuntu 22.04/24.04, Debian Bullseye/Bookworm, Arch Linux, Fedora, openSUSE
-Leap, Rocky Linux, and Alpine containers. This verifies that the release is not dependent on
-Ubuntu-only runtime files or glibc shared libraries.
-
-When Docker is available locally:
+Install Rust, `musl-gcc`, and the musl target for the host distribution, then run:
 
 ```sh
-./scripts/package-linux.sh 1.0.0
+./scripts/package-linux.sh
+(cd dist/release && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
 mkdir -p /tmp/tickt-release-check
 tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C /tmp/tickt-release-check
+/tmp/tickt-release-check/tickt --version
+```
+
+With Docker, test the same extracted binary in several distro families:
+
+```sh
 for image in ubuntu:22.04 debian:bookworm-slim archlinux:latest fedora:latest alpine:3.20; do
-  docker run --rm -v /tmp/tickt-release-check:/release:ro "$image" /release/tickt --version
+  docker run --rm \
+    -v /tmp/tickt-release-check:/release:ro \
+    "$image" /release/tickt --version
 done
 ```
 
-## Windows via WSL2
+## Terminal checklist
 
-Native Windows builds are not part of v1.0. Test the Linux artifact inside WSL2 using Windows
-Terminal:
+In a real Linux terminal such as GNOME Terminal, Konsole, Alacritty, Foot, or xterm:
 
-```powershell
-wsl --install -d Ubuntu
-```
-
-Inside WSL, extract `tickt-linux-x86_64.tar.gz`, run `tickt --version`, and perform the same
-timer, resize, restart, and terminal-cleanup checks. WSL uses Linux/XDG paths and may not provide
-desktop notifications; those integrations are optional.
-
-The current development environment verified the Linux binary and a pseudo-terminal launch.
-Arch/Fedora container checks and WSL checks are configured for CI/manual execution, but were not
-run locally because Docker and WSL are unavailable in the current environment.
+1. Run `tickt --help` and `tickt --version`.
+2. Start, pause, resume, reset, and skip a session.
+3. Resize the terminal while the timer is running.
+4. Open history, statistics, settings, and help.
+5. Quit and confirm raw mode and the cursor are restored.
+6. Relaunch and verify history and active-session recovery.
