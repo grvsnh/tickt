@@ -1,4 +1,4 @@
-.PHONY: build check test fmt lint run release
+.PHONY: build check test fmt lint quality fetch run release release-check
 
 build:
 	cargo build --locked
@@ -15,8 +15,17 @@ fmt:
 lint:
 	cargo clippy --locked --all-targets -- -D warnings
 
+quality: fmt check test lint
+
+fetch:
+	cargo fetch --locked
+
 run:
 	cargo run --locked
 
 release:
 	./scripts/package-linux.sh
+
+release-check: release
+	(cd dist/release && sha256sum -c tickt-linux-x86_64.tar.gz.sha256)
+	tmpdir=$$(mktemp -d); trap 'rmdir "$$tmpdir" 2>/dev/null || true' EXIT; tar -xzf dist/release/tickt-linux-x86_64.tar.gz -C "$$tmpdir"; "$$tmpdir/tickt" --version
