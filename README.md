@@ -45,13 +45,36 @@ There is no published release binary or package repository yet. Build from sourc
 pinned Rust toolchain:
 
 ```sh
-cd /path/to/tickt
+git clone https://github.com/grvsnh/tickt.git
+cd tickt
 cargo build --release --locked
 ./target/release/tickt --help
 ```
 
-The repository does not publish a clone URL yet; use the checkout supplied by your distribution
-or development workflow. The `rust-toolchain.toml` file pins the compiler used by Cargo.
+The `rust-toolchain.toml` file pins the compiler used by Cargo. If you already have a checkout,
+run the build commands from its root.
+
+### Linux installation through npm
+
+The tagged release workflow publishes a small npm distribution wrapper named `tickt`. After the
+first release is published, Linux x86_64 users can install the prebuilt application with:
+
+```sh
+npm install --global tickt
+tickt
+```
+
+The npm package is not a JavaScript rewrite. Its postinstall step downloads the matching GitHub
+release binary, verifies its SHA-256 checksum, and installs it behind the `tickt` command. After
+installation, Tickt itself does not require Node.js or network access. Source builds remain the
+fallback for other platforms and architectures.
+
+To test the npm wrapper locally against the release binary built from this checkout:
+
+```sh
+cargo build --release --locked
+TICKT_BINARY_PATH="$PWD/target/release/tickt" npm install --global ./npm/tickt
+```
 
 The source build needs a stable Rust toolchain (Rust 1.88.0), a C compiler, and `pkg-config`.
 SQLite is compiled through `rusqlite`'s bundled feature, so a system SQLite development package
@@ -199,6 +222,30 @@ Use the one-minute development configuration from [docs/demo.md](docs/demo.md), 
 with temporary XDG directories. Start, pause, resume, complete a session, inspect history and
 statistics, quit, and relaunch. The normal default configuration remains 25 minutes; Tickt
 never inserts fake completions or sample history.
+
+## Release process
+
+Releases are made by pushing a semantic-version tag such as `v0.1.0`:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow in `.github/workflows/release.yml` verifies the tag against `Cargo.toml`, builds
+the Linux x86_64 binary, creates checksum-verified GitHub release assets, and publishes the npm
+wrapper. Repository maintainers must configure an `NPM_TOKEN` GitHub Actions secret with publish
+permission before pushing a release tag. The first release has not been published from this
+checkout yet.
+
+## OmniRush integration idea
+
+Tickt is currently a standalone terminal focus tool. A future OmniRush feature could provide an
+inbuilt CLI-based focus mode inside OmniRush itself: a user could launch a focused terminal
+workspace, see the active task and timer together, and receive local session summaries without
+opening another application. This is intentionally only a product idea for the OmniRush
+developers, not an implemented integration, plugin, or dependency. Tickt currently makes no
+OmniRush calls and does not require an OmniRush installation.
 
 ## Project architecture
 

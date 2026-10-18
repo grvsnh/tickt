@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Linux x86_64 release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Confirm tag matches Cargo version
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_VERSION#v}"
+          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          test "$version" = "$cargo_version"
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Assemble Linux assets
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          install -m 0755 target/release/tickt dist/tickt-linux-x86_64
+          tar -C dist -czf "dist/tickt-linux-x86_64.tar.gz" tickt-linux-x86_64
+          sha256sum dist/tickt-linux-x86_64 | tee dist/tickt-linux-x86_64.sha256
+          sha256sum dist/tickt-linux-x86_64.tar.gz | tee dist/tickt-linux-x86_64.tar.gz.sha256
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
+
+      - name: Set up Node.js for npm publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Align npm package version with release tag
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: npm version "${RELEASE_VERSION#v}" --no-git-tag-version --prefix npm/tickt
+
+      - name: Publish npm Linux installer
+        run: npm publish ./npm/tickt --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

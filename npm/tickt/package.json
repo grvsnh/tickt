@@ -1,0 +1,35 @@
+{
+  "name": "tickt",
+  "version": "0.1.0",
+  "description": "A keyboard-driven terminal focus dashboard for Linux",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grvsnh/tickt.git"
+  },
+  "homepage": "https://github.com/grvsnh/tickt",
+  "bugs": {
+    "url": "https://github.com/grvsnh/tickt/issues"
+  },
+  "bin": {
+    "tickt": "bin/tickt.js"
+  },
+  "files": [
+    "bin/tickt.js",
+    "install.js",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ]
+}

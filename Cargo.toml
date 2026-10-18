@@ -6,7 +6,7 @@ rust-version = "1.88"
 description = "A keyboard-driven terminal focus dashboard"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/omnirush/tickt"
+repository = "https://github.com/grvsnh/tickt"
 keywords = ["pomodoro", "terminal", "productivity", "tui"]
 categories = ["command-line-utilities"]
 
