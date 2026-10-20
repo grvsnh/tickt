@@ -6,5 +6,6 @@
 *.db-shm
 *.db-wal
 .env
+.tickt/
 .DS_Store
 __pycache__/

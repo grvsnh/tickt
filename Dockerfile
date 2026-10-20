@@ -1,4 +1,4 @@
-FROM rust:1.88-slim-bookworm
+FROM rust:1.88.0-slim-bookworm
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y build-essential ca-certificates \

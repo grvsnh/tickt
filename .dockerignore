@@ -4,3 +4,5 @@
 target
 *.db
 *.db-*
+.env
+.tickt
