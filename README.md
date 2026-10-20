@@ -5,6 +5,18 @@
 Tickt is a fast, local-first Pomodoro dashboard for Linux terminals. It is keyboard-driven,
 works offline, stores history in SQLite, and has no account, daemon, telemetry, or web UI.
 
+[![CI](https://github.com/grvsnh/tickt/actions/workflows/ci.yml/badge.svg)](https://github.com/grvsnh/tickt/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/grvsnh/tickt?sort=semver)](https://github.com/grvsnh/tickt/releases/latest)
+
+## See it in action
+
+![Tickt terminal dashboard](assets/screenshot-2026-10-20_21-44-51.png)
+
+![Tickt animated terminal demo](assets/tickt-demo.gif)
+
+The demo media is included in the repository and in the release archive so this README remains
+useful after downloading and extracting the package.
+
 ## Install a release
 
 The release is one statically linked x86_64 Linux binary. It is tested on Ubuntu, Debian, Arch,
@@ -51,13 +63,35 @@ sudo dnf install gcc gcc-c++ make musl-gcc
 rustup target add x86_64-unknown-linux-musl
 ```
 
-Build and run the application:
+Build and run the application from a fresh checkout:
 
 ```sh
 git clone https://github.com/grvsnh/tickt.git
 cd tickt
-cargo run --locked
+cargo fetch --locked
+make test
+make run
 ```
+
+The pinned `rust-toolchain.toml` selects Rust 1.88.0. `make test` is the canonical offline test
+command after the initial locked dependency fetch.
+
+### Docker
+
+The Dockerfile pins the Rust build image, bundles SQLite, and produces a runnable terminal image:
+
+```sh
+docker build --tag tickt:1.1.0 .
+docker run --rm -it \
+  --env TERM=xterm-256color \
+  --volume tickt-config:/root/.config/tickt \
+  --volume tickt-data:/root/.local/share/tickt \
+  --volume tickt-state:/root/.local/state/tickt \
+  tickt:1.1.0
+```
+
+Use `Ctrl-C` or `q` to exit. The named volumes keep configuration, history, and recovery state
+between container runs.
 
 Create the exact release archive locally:
 
@@ -97,6 +131,9 @@ Use custom absolute XDG roots with `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_
 tickt config path
 ```
 
+No credentials or secrets are needed. `.env.example` documents an optional project-local XDG
+setup for development; Tickt does not load `.env` files automatically.
+
 The complete configuration example is in `examples/config.toml`. Defaults are 25-minute focus,
 5-minute short break, 15-minute long break, and a 100-minute daily goal. Only fully completed
 focus sessions count toward statistics; skipped, reset, interrupted, partial, and break sessions
@@ -110,10 +147,10 @@ while Tickt was closed is recorded as interrupted rather than fabricated as comp
 The GitHub workflow at `.github/workflows/release.yml` creates the release automatically when
 `main` is pushed:
 
-1. It reads the version from `Cargo.toml`.
-2. It creates and pushes the matching `v<version>` tag.
-3. It builds the static Linux binary.
-4. It verifies the archive across representative Linux distributions.
+1. It reads the version and release notes from the repository.
+2. It runs the quality gate and builds the static Linux binary.
+3. It verifies the archive across representative Linux distributions.
+4. It creates and pushes the matching `v<version>` tag.
 5. It publishes the GitHub release and checksum.
 
 For a new release, update the version in `Cargo.toml`, run the checks, and push `main`:
@@ -134,6 +171,12 @@ make check
 make test
 make lint
 make release
+```
+
+The one-command correctness gate is:
+
+```sh
+make quality
 ```
 
 Development benchmarks stay separate from the correctness gate:

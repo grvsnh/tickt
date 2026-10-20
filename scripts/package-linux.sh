@@ -37,6 +37,7 @@ cp "target/$target/release/tickt" "$package_dir/tickt"
 cp LICENSE "$package_dir/LICENSE"
 cp README.md "$package_dir/README.md"
 cp "$release_notes" "$package_dir/RELEASE_NOTES.txt"
+cp -R assets "$package_dir/assets"
 chmod 0755 "$package_dir/tickt"
 tar -I 'gzip -n' \
   --sort=name \
@@ -46,7 +47,7 @@ tar -I 'gzip -n' \
   --numeric-owner \
   -C "$package_dir" \
   -cf "$archive" \
-  LICENSE README.md RELEASE_NOTES.txt tickt
+  LICENSE README.md RELEASE_NOTES.txt assets tickt
 (cd "$(dirname "$archive")" && sha256sum "$(basename "$archive")" > "$(basename "$checksum")")
 
 printf 'Tickt %s package created:\n  %s\n  %s\n' "$version" "$archive" "$checksum"
