@@ -394,14 +394,7 @@ fn draw_help(frame: &mut Frame<'_>, _app: &App, area: Rect, theme: Theme) {
 }
 
 fn draw_footer(frame: &mut Frame<'_>, app: &App, area: Rect, theme: Theme) {
-    let hint = match app.view {
-        View::Dashboard => {
-            "Space start/pause   n next   h history   t stats   , settings   ? help   q quit"
-        }
-        View::History | View::Statistics | View::Settings | View::Help => {
-            "Esc dashboard   ? help   q quit"
-        }
-    };
+    let hint = footer_hint(app);
     let message = app.message.as_deref().unwrap_or(hint);
     frame.render_widget(
         Paragraph::new(message)
@@ -410,9 +403,29 @@ fn draw_footer(frame: &mut Frame<'_>, app: &App, area: Rect, theme: Theme) {
             } else {
                 theme.muted
             }))
-            .alignment(Alignment::Center),
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true }),
         area,
     );
+}
+
+fn footer_hint(app: &App) -> &'static str {
+    match app.view {
+        View::Dashboard => match app.timer.status() {
+            TimerStatus::Idle => {
+                "Space start   n next   b/l break   h history   t stats   ? help   q quit"
+            }
+            TimerStatus::Running => {
+                "Space pause   r reset   s skip   h history   t stats   ? help   q quit"
+            }
+            TimerStatus::Paused => {
+                "Space resume   r reset   s skip   h history   t stats   ? help   q quit"
+            }
+            TimerStatus::Completed => "n next   h history   t stats   ? help   q quit",
+        },
+        View::History => "Esc dashboard   j/k scroll   ? help   q quit",
+        View::Statistics | View::Settings | View::Help => "Esc dashboard   ? help   q quit",
+    }
 }
 
 fn draw_compact(frame: &mut Frame<'_>, app: &App, theme: Theme) {
@@ -467,6 +480,7 @@ fn draw_confirmation(
     ])
     .alignment(Alignment::Center)
     .style(Style::default().fg(theme.primary))
+    .wrap(Wrap { trim: true })
     .block(
         Block::default()
             .borders(Borders::ALL)
@@ -499,6 +513,7 @@ fn draw_recovery(frame: &mut Frame<'_>, _app: &App, expired: bool, theme: Theme)
     ])
     .alignment(Alignment::Center)
     .style(Style::default().fg(theme.primary))
+    .wrap(Wrap { trim: true })
     .block(Block::default().borders(Borders::ALL).border_style(theme.accent).style(theme.surface));
     frame.render_widget(ratatui::widgets::Clear, area);
     frame.render_widget(content, area);

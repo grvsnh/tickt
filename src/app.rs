@@ -44,6 +44,7 @@ pub struct App {
     pub(crate) stats: Statistics,
     focus_accumulator: FocusAccumulator,
     pub(crate) message: Option<String>,
+    message_until: Option<Instant>,
     pub(crate) confirmation: Option<ConfirmAction>,
     pub(crate) recovery: Option<RecoveryPrompt>,
     pub(crate) persistence_warning: bool,
@@ -82,6 +83,7 @@ impl App {
             stats: Statistics::empty(local_today(), 0),
             focus_accumulator: FocusAccumulator::default(),
             message: None,
+            message_until: None,
             confirmation: None,
             recovery: None,
             persistence_warning: false,
@@ -119,6 +121,11 @@ impl App {
         let mut last_clock_minute = None;
         while !self.should_quit {
             let now = Instant::now();
+            if self.message_until.is_some_and(|deadline| now >= deadline) {
+                self.message = None;
+                self.message_until = None;
+                redraw = true;
+            }
             if self.stats_date != local_today() {
                 self.refresh_statistics();
                 redraw = true;
@@ -191,6 +198,11 @@ impl App {
         }
     }
 
+    fn set_message(&mut self, message: impl Into<String>) {
+        self.message = Some(message.into());
+        self.message_until = Some(Instant::now() + Duration::from_secs(4));
+    }
+
     fn handle_dashboard_key(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
             KeyCode::Char('q') => self.confirmation = Some(ConfirmAction::Quit),
@@ -211,7 +223,7 @@ impl App {
                 self.confirmation = Some(ConfirmAction::Reset)
             }
             KeyCode::Char('r') => {
-                self.message = Some("There is no active session to reset.".to_owned())
+                self.set_message("There is no active session to reset.");
             }
             KeyCode::Char('s')
                 if matches!(self.timer.status(), TimerStatus::Running | TimerStatus::Paused) =>
@@ -219,7 +231,7 @@ impl App {
                 self.confirmation = Some(ConfirmAction::Skip)
             }
             KeyCode::Char('s') => {
-                self.message = Some("There is no active session to skip.".to_owned())
+                self.set_message("There is no active session to skip.");
             }
             _ => {}
         }
@@ -275,13 +287,13 @@ impl App {
             KeyCode::Char('r') if self.recovery.as_ref().is_some_and(|prompt| !prompt.expired) => {
                 self.recovery = None;
                 self.persist_active()?;
-                self.message = Some("Recovered the unfinished timer.".to_owned());
+                self.set_message("Recovered the unfinished timer.");
             }
             KeyCode::Char('d') | KeyCode::Char('r') => self.discard_recovery()?,
             KeyCode::Esc if self.recovery.as_ref().is_some_and(|prompt| !prompt.expired) => {
                 self.recovery = None;
                 self.persist_active()?;
-                self.message = Some("Kept the recovered timer active.".to_owned());
+                self.set_message("Kept the recovered timer active.");
             }
             _ => {}
         }
@@ -313,7 +325,7 @@ impl App {
             .start_focus(Instant::now(), Utc::now())
             .map_err(|error| anyhow::anyhow!(error))?;
         self.persist_active()?;
-        self.message = Some("Focus started. Protect the block.".to_owned());
+        self.set_message("Focus started. Protect the block.");
         Ok(())
     }
 
@@ -322,14 +334,14 @@ impl App {
             self.timer.clear_completed();
         }
         if self.timer.status() != TimerStatus::Idle {
-            self.message = Some("Finish or reset the current session first.".to_owned());
+            self.set_message("Finish or reset the current session first.");
             return Ok(());
         }
         self.timer
             .start_break(session_type, Instant::now(), Utc::now())
             .map_err(|error| anyhow::anyhow!(error))?;
         self.persist_active()?;
-        self.message = Some(format!("{} started.", session_type.label()));
+        self.set_message(format!("{} started.", session_type.label()));
         Ok(())
     }
 
@@ -341,8 +353,7 @@ impl App {
             TimerStatus::Completed => SessionType::Focus,
             TimerStatus::Idle => SessionType::Focus,
             _ => {
-                self.message =
-                    Some("Pause, reset, or finish the current session first.".to_owned());
+                self.set_message("Pause, reset, or finish the current session first.");
                 return Ok(());
             }
         };
@@ -364,7 +375,7 @@ impl App {
         if !had_record {
             self.storage.clear_active()?;
         }
-        self.message = Some("Session reset; it will not count as completed work.".to_owned());
+        self.set_message("Session reset; it will not count as completed work.");
         self.refresh_history()?;
         self.refresh_statistics();
         Ok(())
@@ -373,7 +384,7 @@ impl App {
     fn skip_timer(&mut self) -> Result<()> {
         let record = self.timer.skip(Instant::now()).map_err(|error| anyhow::anyhow!(error))?;
         self.storage.finish_session(&record)?;
-        self.message = Some("Session skipped; it will not count as completed work.".to_owned());
+        self.set_message("Session skipped; it will not count as completed work.");
         self.refresh_history()?;
         self.refresh_statistics();
         Ok(())
@@ -387,9 +398,9 @@ impl App {
         if let Some(warning) =
             notifications::session_complete(&self.config.notifications, record.session_type)
         {
-            self.message = Some(warning);
+            self.set_message(warning);
         } else {
-            self.message = Some(format!("{} complete.", record.session_type.label()));
+            self.set_message(format!("{} complete.", record.session_type.label()));
         }
         self.refresh_history()?;
         self.refresh_statistics();
@@ -405,7 +416,7 @@ impl App {
             self.storage.clear_active()?;
         }
         self.recovery = None;
-        self.message = Some("Unfinished session recorded as interrupted.".to_owned());
+        self.set_message("Unfinished session recorded as interrupted.");
         self.refresh_history()?;
         self.refresh_statistics();
         Ok(())
